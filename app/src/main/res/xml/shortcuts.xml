@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="cover_widgets"
+        android:enabled="true"
+        android:shortcutShortLabel="@string/widget_shortcut_short"
+        android:shortcutLongLabel="@string/widget_shortcut_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.eightbit.samsprung"
+            android:targetClass="com.eightbit.samsprung.settings.WidgetManagerActivity" />
+    </shortcut>
+</shortcuts>

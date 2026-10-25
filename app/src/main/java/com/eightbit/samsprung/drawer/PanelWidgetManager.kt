@@ -5,11 +5,13 @@ import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetHostView
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetManager.*
+import android.appwidget.AppWidgetProviderInfo
+import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
-import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -19,10 +21,10 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.core.view.children
 import androidx.viewpager2.widget.ViewPager2
 import com.eightbit.content.ScaledContext
-import com.eightbit.os.Version
 import com.eightbit.samsprung.R
 import com.eightbit.samsprung.SamSprungOverlay
 import com.eightbit.samsprung.drawer.panels.*
+import com.eightbit.samsprung.settings.Preferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -36,58 +38,85 @@ class PanelWidgetManager(
 ) {
     private var displayMetrics: IntArray = ScaledContext(overlay).getDisplayParams()
 
+    /**
+     * Density override chosen by the user in the widget manager screen.
+     * [WidgetSizing.DENSITY_AUTO] keeps the original behavior.
+     */
+    private val widgetDensity: Int
+        get() = overlay.getSharedPreferences(Preferences.prefsValue, Context.MODE_PRIVATE)
+            .getInt(Preferences.prefZoom, WidgetSizing.DENSITY_AUTO)
+
+    /**
+     * Creates the host view for a widget, ready to be shown on the cover display.
+     */
+    private fun createHostView(
+        appWidgetId: Int, appWidgetInfo: AppWidgetProviderInfo, launcherInfo: PanelWidgetInfo
+    ): AppWidgetHostView {
+        return appWidgetHost.createView(
+            WidgetSizing.widgetContext(overlay.applicationContext, widgetDensity, true),
+            appWidgetId, appWidgetInfo
+        ).apply { tag = launcherInfo }
+    }
+
+    /**
+     * Puts the host view in a pager page so that it fills the whole cover display and tells
+     * the widget how much room it really has.
+     */
+    private fun attachToPage(fragment: PanelViewFragment, hostView: AppWidgetHostView) {
+        fragment.setListener(object: PanelViewFragment.ViewCreatedListener {
+            override fun onViewCreated(view: View) {
+                val layout = view as LinearLayout
+                layout.removeAllViews()
+                // The fragment view may have been recreated while the old one still holds us
+                (hostView.parent as? ViewGroup)?.removeView(hostView)
+                layout.addView(hostView, LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+                ))
+                WidgetSizing.fit(hostView, displayMetrics[0], displayMetrics[1])
+            }
+        })
+    }
+
+    /**
+     * Removes every widget page. Used before rebinding the widgets after the list was changed
+     * from somewhere else (the widget manager screen of the main app).
+     */
+    fun resetPages() {
+        pagerAdapter.clearFragments()
+    }
+
     @SuppressLint("InflateParams")
     fun completeAddAppWidget(appWidgetId: Int, viewPager: ViewPager2) {
         val appWidgetInfo = mAppWidgetManager.getAppWidgetInfo(appWidgetId)
+        if (null == appWidgetInfo) {
+            appWidgetHost.deleteAppWidgetId(appWidgetId)
+            Toast.makeText(overlay, R.string.widget_error, Toast.LENGTH_LONG).show()
+            return
+        }
 
         // Build Launcher-specific widget info and save to database
         val launcherInfo = PanelWidgetInfo(appWidgetId)
 
-        var spanX = appWidgetInfo.minWidth
-        var spanY = appWidgetInfo.minHeight
-        if (Version.isSnowCone) {
-            spanX = Integer.max(appWidgetInfo.minWidth, appWidgetInfo.maxResizeWidth)
-            spanY = Integer.max(appWidgetInfo.minHeight, appWidgetInfo.maxResizeHeight)
-        }
-        if (spanX > displayMetrics[0]) spanX = displayMetrics[0]
-        if (spanY > displayMetrics[1]) spanY = displayMetrics[1]
-        val spans = intArrayOf(spanX, spanY)
-
-        launcherInfo.spanX = spans[0]
-        launcherInfo.spanY = spans[1]
+        // Every widget occupies the entire cover display
+        val spanX = displayMetrics[0]
+        val spanY = displayMetrics[1]
+        launcherInfo.spanX = spanX
+        launcherInfo.spanY = spanY
 
         CoroutineScope(Dispatchers.IO).launch(Dispatchers.IO) {
             WidgetModel.addItemToDatabase(
                 overlay.applicationContext, launcherInfo,
                 WidgetSettings.Favorites.CONTAINER_DESKTOP,
-                spans[0], spans[1], false
+                spanX, spanY, false
             )
         }
         overlay.model.addDesktopAppWidget(launcherInfo)
 
-        launcherInfo.hostView = appWidgetHost.createView(ScaledContext(
-            ScaledContext(overlay.applicationContext).internal(1.5f)
-        ).cover(), appWidgetId, appWidgetInfo)
-        launcherInfo.hostView!!.setAppWidget(appWidgetId, appWidgetInfo)
-        launcherInfo.hostView!!.tag = launcherInfo
+        val hostView = createHostView(appWidgetId, appWidgetInfo, launcherInfo)
+        launcherInfo.hostView = hostView
 
         val id = pagerAdapter.addFragment()
-        val fragment = pagerAdapter.getFragment(id)
-        val params: LinearLayout.LayoutParams = LinearLayout.LayoutParams(
-            displayMetrics[0], displayMetrics[1]
-        )
-        params.gravity = Gravity.CENTER
-        fragment.setListener(object: PanelViewFragment.ViewCreatedListener {
-            override fun onViewCreated(view: View) {
-                val layout = view as LinearLayout
-                try {
-                    layout.children.forEach { child ->
-                        if (child is AppWidgetHostView) layout.removeView(child)
-                    }
-                } catch (_: Exception) { }
-                layout.addView(launcherInfo.hostView, params)
-            }
-        })
+        attachToPage(pagerAdapter.getFragment(id), hostView)
         viewPager.setCurrentItem(id, true)
     }
 
@@ -183,31 +212,16 @@ class PanelWidgetManager(
             val item = appWidgets.removeFirst()
             val appWidgetId = item.appWidgetId
             val appWidgetInfo = mAppWidgetManager.getAppWidgetInfo(appWidgetId)
-            item.hostView = appWidgetHost.createView(ScaledContext(
-                ScaledContext(overlay.applicationContext).internal(1.5f)
-            ).cover(), appWidgetId, appWidgetInfo).apply {
-                setAppWidget(appWidgetId, appWidgetInfo)
-                tag = item
-            }
+            // A widget whose provider is not installed anymore has nothing to show. It is kept in
+            // the database so it comes back if the app is reinstalled, and can be removed from
+            // the widget manager screen of the main app.
+            if (null != appWidgetInfo) {
+                val hostView = createHostView(appWidgetId, appWidgetInfo, item)
+                item.hostView = hostView
 
-            val id = pagerAdapter.addFragment()
-            val fragment = pagerAdapter.getFragment(id)
-            val params: LinearLayout.LayoutParams = LinearLayout.LayoutParams(
-                displayMetrics[0], displayMetrics[1]
-            )
-            params.gravity = Gravity.CENTER
-            fragment.setListener(object: PanelViewFragment.ViewCreatedListener {
-                override fun onViewCreated(view: View) {
-                    try {
-                        val layout = (view as LinearLayout)
-                        layout.children.forEach {
-                            if (it is AppWidgetHostView) layout.removeView(it)
-                        }
-                    } catch (_: Exception) { }
-                    val layout = view as LinearLayout
-                    layout.addView(item.hostView, params)
-                }
-            })
+                val id = pagerAdapter.addFragment()
+                attachToPage(pagerAdapter.getFragment(id), hostView)
+            }
         }
         if (appWidgets.isNotEmpty())
             binder.obtainMessage(DesktopBinder.MESSAGE_BIND_APPWIDGETS).sendToTarget()

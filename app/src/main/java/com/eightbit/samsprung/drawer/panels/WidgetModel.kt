@@ -98,7 +98,7 @@ class WidgetModel {
             val desktopAppWidgets = mDesktopAppWidgets!!
             contentResolver.query(
                 Favorites.CONTENT_URI,
-                null, null, null, null
+                null, null, null, "${BaseColumns._ID} ASC"
             ).use { c ->
                 val idIndex = c!!.getColumnIndexOrThrow(BaseColumns._ID)
 //                val intentIndex = c.getColumnIndexOrThrow(BaseLauncherColumns.INTENT)
@@ -209,9 +209,59 @@ class WidgetModel {
          * @param context
          * @param item
          */
-        fun deleteItemFromDatabase(context: Context, item: WidgetInfo) {
+        fun deleteItemFromDatabase(context: Context, item: WidgetInfo, notify: Boolean = false) {
             val cr = context.contentResolver
-            cr.delete(Favorites.getContentUri(item.id, false), null, null)
+            cr.delete(Favorites.getContentUri(item.id, notify), null, null)
+        }
+
+        /**
+         * Reads the widgets saved for the cover display, in the order they are shown.
+         * Must not be called from the main thread.
+         */
+        fun queryDesktopWidgets(context: Context): ArrayList<PanelWidgetInfo> {
+            val widgets = arrayListOf<PanelWidgetInfo>()
+            context.contentResolver.query(
+                Favorites.CONTENT_URI, null, null, null, "${BaseColumns._ID} ASC"
+            )?.use { c ->
+                val idIndex = c.getColumnIndexOrThrow(BaseColumns._ID)
+                val containerIndex = c.getColumnIndexOrThrow(Favorites.CONTAINER)
+                val itemTypeIndex = c.getColumnIndexOrThrow(BaseLauncherColumns.ITEM_TYPE)
+                val appWidgetIdIndex = c.getColumnIndexOrThrow(Favorites.APPWIDGET_ID)
+                val spanXIndex = c.getColumnIndexOrThrow(Favorites.SPANX)
+                val spanYIndex = c.getColumnIndexOrThrow(Favorites.SPANY)
+                while (c.moveToNext()) {
+                    try {
+                        if (c.getInt(itemTypeIndex) != Favorites.ITEM_TYPE_APPWIDGET) continue
+                        if (c.getInt(containerIndex) != Favorites.CONTAINER_DESKTOP) continue
+                        widgets.add(PanelWidgetInfo(c.getInt(appWidgetIdIndex)).apply {
+                            id = c.getLong(idIndex)
+                            spanX = c.getInt(spanXIndex)
+                            spanY = c.getInt(spanYIndex)
+                            container = Favorites.CONTAINER_DESKTOP.toLong()
+                        })
+                    } catch (_: Exception) { }
+                }
+            }
+            return widgets
+        }
+
+        /**
+         * Swaps the position of two widgets. The order of the pages is the order of the rows, so
+         * the rows keep their ids and exchange their contents instead. Only the second update
+         * notifies the observers, so the cover display refreshes once.
+         */
+        fun swapItems(context: Context, first: PanelWidgetInfo, second: PanelWidgetInfo) {
+            val cr = context.contentResolver
+            cr.update(Favorites.getContentUri(first.id, false), widgetValues(second), null, null)
+            cr.update(Favorites.getContentUri(second.id, true), widgetValues(first), null, null)
+        }
+
+        private fun widgetValues(item: PanelWidgetInfo): ContentValues {
+            return ContentValues().apply {
+                put(Favorites.APPWIDGET_ID, item.appWidgetId)
+                put(Favorites.SPANX, item.spanX)
+                put(Favorites.SPANY, item.spanY)
+            }
         }
     }
 }

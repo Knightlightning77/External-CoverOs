@@ -80,7 +80,15 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
+        <activity
+            android:name=".settings.WidgetManagerActivity"
+            android:label="@string/widget_manager_title"
+            android:parentActivityName=".settings.CoverPreferences"
+            android:exported="false" />
         <activity
             android:name=".update.UpdateShimActivity"
             android:excludeFromRecents="true"

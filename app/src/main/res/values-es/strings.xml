@@ -123,4 +123,24 @@
     
     <string name="gadget_error_text">Problema al cargar el widget</string>
     <string name="widget_error">¡Widget no disponible!</string>
+
+    <!-- Widget manager (main display) -->
+    <string name="widget_manager_title">Widgets de la pantalla externa</string>
+    <string name="widget_manager_hint">Elige qué widgets aparecen en la pantalla externa. Cada widget ocupa toda la pantalla externa; desliza para cambiar entre ellos.</string>
+    <string name="widget_manager_empty">Aún no hay widgets. Pulsa \"Añadir widget\" para colocar el primero.</string>
+    <string name="widget_manager_enabled">Mostrar widgets en la pantalla externa</string>
+    <string name="widget_add">Añadir widget</string>
+    <string name="widget_move_up">Mover antes</string>
+    <string name="widget_move_down">Mover después</string>
+    <string name="widget_configure">Configurar widget</string>
+    <string name="widget_remove">Quitar widget</string>
+    <string name="widget_position">Página %1$d de %2$d</string>
+    <string name="widget_unavailable">No disponible (aplicación desinstalada)</string>
+    <string name="widget_zoom_title">Zoom de los widgets</string>
+    <string name="widget_zoom_auto">Automático</string>
+    <string name="widget_zoom_value">%1$d ppp (unos %2$d dp de ancho)</string>
+    <string name="widget_zoom_hint">Los valores más bajos dan más espacio a los widgets en la pantalla externa. Se aplica la próxima vez que abras la pantalla externa.</string>
+    <string name="widget_manager_menu">Widgets</string>
+    <string name="widget_shortcut_short">Widgets</string>
+    <string name="widget_shortcut_long">Gestionar widgets de la pantalla externa</string>
 </resources>

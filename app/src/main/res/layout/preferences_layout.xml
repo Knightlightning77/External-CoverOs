@@ -266,6 +266,55 @@
                             android:id="@+id/drawer" />
 
                         <LinearLayout
+                            android:id="@+id/menu_widgets"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="@color/backgroundTint"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="6dp"
+                            android:orientation="vertical">
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:background="?colorPrimary"
+                                android:paddingTop="4dp"
+                                android:layout_marginBottom="4dp"/>
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal"
+                                android:layout_marginHorizontal="14dp"
+                                tools:ignore="UseCompoundDrawables">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:textSize="16sp"
+                                    android:textColor="?android:textColorPrimary"
+                                    android:gravity="center_vertical"
+                                    android:text="@string/widget_manager_menu" />
+
+                                <androidx.appcompat.widget.AppCompatImageView
+                                    android:layout_width="wrap_content"
+                                    android:gravity="center_vertical"
+                                    android:layout_gravity="end"
+                                    app:srcCompat="@drawable/ic_widgets_24dp"
+                                    app:tint="?android:textColorPrimary"
+                                    android:layout_height="wrap_content"
+                                    android:contentDescription="@string/description_icon"/>
+                            </LinearLayout>
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:background="?colorPrimary"
+                                android:layout_marginTop="4dp"/>
+                        </LinearLayout>
+
+                        <LinearLayout
                             android:id="@+id/menu_notices"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"

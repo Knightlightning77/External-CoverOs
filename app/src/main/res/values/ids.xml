@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tag key used to keep the size reporter attached to a widget host view -->
+    <item name="widget_size_reporter" type="id" />
+</resources>

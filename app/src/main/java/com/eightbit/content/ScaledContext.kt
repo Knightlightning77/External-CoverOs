@@ -36,6 +36,22 @@ class ScaledContext(base: Context) : ContextWrapper(base) {
         }
     }
 
+    /**
+     * Size in pixels of the cover display in portrait, as [width, height]. It works from
+     * the main display too, so the widget manager can preview what the cover will show.
+     */
+    fun getCoverParams(): IntArray {
+        try {
+            with (cover().getSystemService(WINDOW_SERVICE) as WindowManager) {
+                maximumWindowMetrics.bounds.run {
+                    if (width() > 0 && height() > 0)
+                        return intArrayOf(minOf(width(), height()), maxOf(width(), height()))
+                }
+            }
+        } catch (_: Exception) { }
+        return if (Debug.isOppoDevice) intArrayOf(382, 720) else intArrayOf(260, 512)
+    }
+
     fun internal(density: Float): ScaledContext {
         val metrics = resources.displayMetrics
         val orientation = resources.configuration.orientation

@@ -646,6 +646,10 @@ class CoverPreferences : AppCompatActivity() {
         }
         drawer.isGone = true
 
+        findViewById<LinearLayout>(R.id.menu_widgets).setOnClickListener {
+            startActivity(Intent(this, WidgetManagerActivity::class.java))
+        }
+
         val fabSize = findViewById<AppCompatCheckBox>(R.id.fab_size_switch)
         fabSize.isChecked = prefs.getBoolean(Preferences.prefTapper, false)
         fabSize.setOnCheckedChangeListener { _, isChecked ->

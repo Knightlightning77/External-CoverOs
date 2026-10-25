@@ -564,7 +564,6 @@ class SamSprungOverlay : AppCompatActivity() {
                             if (widget is PanelWidgetInfo) {
                                 model.removeDesktopAppWidget(widget)
                                 adapter.removeFragment(index)
-                                adapter.notifyItemRemoved(index)
                                 appWidgetHost.deleteAppWidgetId(child.appWidgetId)
                                 WidgetModel.deleteItemFromDatabase(
                                     applicationContext, widget
@@ -1037,7 +1036,16 @@ class SamSprungOverlay : AppCompatActivity() {
         menuButton.layoutParams = menuParams
     }
 
+    /**
+     * The list of widgets was changed from outside of the cover display, for example from
+     * the widget manager screen of the main app. Drop the current widget pages and bind them
+     * again so the pages reflect the saved list and order.
+     */
     private fun onFavoritesChanged() {
+        mBinder?.mTerminate = true
+        widgetManager?.resetPages()
+        if (viewPager.currentItem >= pagerAdapter.itemCount)
+            viewPager.setCurrentItem(1, false)
         model.loadUserItems(false, this)
     }
 
