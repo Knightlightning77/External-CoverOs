@@ -1,0 +1,13 @@
+--- a/app/src/main/java/com/eightbit/samsprung/settings/WidgetManagerActivity.kt	2026-10-25 13:53:33.572534610 +0100
++++ b/app/src/main/java/com/eightbit/samsprung/settings/WidgetManagerActivity.kt	2026-10-25 13:53:33.575446549 +0100
+@@ -336,7 +336,9 @@
+     private fun showWidgetPicker() {
+         val entries = appWidgetManager.installedProviders.map { info ->
+             val app = try {
+-                packageManager.getApplicationLabel(info.providerInfo.applicationInfo).toString()
++                packageManager.getApplicationLabel(
++                    packageManager.getApplicationInfo(info.provider.packageName, 0)
++                ).toString()
+             } catch (_: Exception) {
+                 info.provider.packageName
+             }

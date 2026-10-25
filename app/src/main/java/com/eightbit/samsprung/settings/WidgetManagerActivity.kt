@@ -336,7 +336,9 @@ class WidgetManagerActivity : AppCompatActivity() {
     private fun showWidgetPicker() {
         val entries = appWidgetManager.installedProviders.map { info ->
             val app = try {
-                packageManager.getApplicationLabel(info.providerInfo.applicationInfo).toString()
+                packageManager.getApplicationLabel(
+                    packageManager.getApplicationInfo(info.provider.packageName, 0)
+                ).toString()
             } catch (_: Exception) {
                 info.provider.packageName
             }
