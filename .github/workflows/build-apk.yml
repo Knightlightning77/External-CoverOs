@@ -1,7 +1,7 @@
 name: Build APK
 
-# Se ejecuta al subir cambios a cualquier rama y también a mano
-# desde la pestaña Actions > "Build APK" > "Run workflow".
+# Se ejecuta al subir cambios a cualquier rama y tambien a mano
+# desde la pestana Actions > "Build APK" > "Run workflow".
 on:
   push:
   workflow_dispatch:
@@ -24,14 +24,34 @@ jobs:
       - name: Permisos de gradlew
         run: chmod +x gradlew
 
-      # La variante "debug" se firma sola con la clave de depuración,
-      # así que no hace falta ninguna clave ni secreto.
       - name: Compilar APK
         run: ./gradlew assembleGithubDebug --stacktrace
+
+      # La variante debug del proyecto sale SIN firma y Android la rechaza
+      # ("el paquete no es valido"). Aqui se alinea y se firma con la clave
+      # personal incluida en .github/samsprung-debug.jks.
+      - name: Alinear y firmar APK
+        run: |
+          set -e
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
+          APK=$(ls app/build/outputs/apk/github/debug/*.apk | head -n 1)
+          echo "APK de entrada: $APK"
+          mkdir -p salida
+          "$BT/zipalign" -f -p 4 "$APK" salida/alineado.apk
+          "$BT/apksigner" sign \
+            --ks .github/samsprung-debug.jks \
+            --ks-pass pass:android --key-pass pass:android \
+            --out salida/SamSprung.apk salida/alineado.apk
+          rm salida/alineado.apk
+          echo "== Firma =="
+          "$BT/apksigner" verify --verbose --print-certs salida/SamSprung.apk
+          echo "== Datos del paquete =="
+          "$BT/aapt2" dump badging salida/SamSprung.apk | head -n 12 || true
+          ls -la salida
 
       - name: Subir APK
         uses: actions/upload-artifact@v4
         with:
           name: SamSprung-APK
-          path: app/build/outputs/apk/github/debug/*.apk
+          path: salida/SamSprung.apk
           retention-days: 30
