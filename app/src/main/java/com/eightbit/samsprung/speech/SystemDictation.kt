@@ -40,6 +40,11 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
     /** Shows (or moves) the microphone next to [field]. */
     fun show(field: AccessibilityNodeInfo, displayId: Int = -1) {
         if (dictation.isListening && target?.let { it == field } == true) return
+        // Only for the cover display: the main display has its own keyboard and dictation
+        if (pickDisplay(displayId).displayId == Display.DEFAULT_DISPLAY) {
+            hide()
+            return
+        }
         target = field
         val bounds = Rect()
         field.getBoundsInScreen(bounds)
