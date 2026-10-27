@@ -1,0 +1,440 @@
+diff --git a/app/src/github/res/xml/accessibility_service.xml b/app/src/github/res/xml/accessibility_service.xml
+index 00a5934..a3f0916 100755
+--- a/app/src/github/res/xml/accessibility_service.xml
++++ b/app/src/github/res/xml/accessibility_service.xml
+@@ -1,6 +1,7 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:accessibilityEventTypes="typeViewClicked"
++    android:accessibilityEventTypes="typeViewClicked|typeViewFocused|typeWindowStateChanged"
++    android:canRetrieveWindowContent="true"
+     android:accessibilityFeedbackType="feedbackGeneric"
+     android:notificationTimeout="100"
+     android:description="@string/accessibility_details"/>
+diff --git a/app/src/main/java/com/eightbit/samsprung/AccessibilityObserver.kt b/app/src/main/java/com/eightbit/samsprung/AccessibilityObserver.kt
+index c929989..b1d4310 100755
+--- a/app/src/main/java/com/eightbit/samsprung/AccessibilityObserver.kt
++++ b/app/src/main/java/com/eightbit/samsprung/AccessibilityObserver.kt
+@@ -21,6 +21,9 @@ import android.content.Intent
+ import android.provider.Settings
+ import android.view.WindowManager
+ import android.view.accessibility.AccessibilityEvent
++import android.view.accessibility.AccessibilityNodeInfo
++import com.eightbit.samsprung.settings.Preferences
++import com.eightbit.samsprung.speech.SystemDictation
+ import java.io.File
+ 
+ class AccessibilityObserver : AccessibilityService() {
+@@ -43,6 +46,11 @@ class AccessibilityObserver : AccessibilityService() {
+             getInstance()?.performGlobalAction(GLOBAL_ACTION_BACK)
+         }
+ 
++        /** Applies the current "dictation microphone" setting to the running service. */
++        fun refreshServiceInfo() {
++            getInstance()?.applyServiceInfo()
++        }
++
+         fun getWindowManager() : WindowManager {
+             return getInstance()?.getSystemService(WINDOW_SERVICE) as WindowManager
+         }
+@@ -52,17 +60,63 @@ class AccessibilityObserver : AccessibilityService() {
+         observerInstance = this
+     }
+ 
+-    override fun onServiceConnected() {
+-        val info = AccessibilityServiceInfo()
+-        info.packageNames = arrayOf(packageName)
+-        info.eventTypes = AccessibilityEvent.TYPE_VIEW_CLICKED
++    private var dictation: SystemDictation? = null
++
++    private fun isDictationEnabled(): Boolean {
++        return !BuildConfig.GOOGLE_PLAY && getSharedPreferences(
++            Preferences.prefsValue, Context.MODE_PRIVATE
++        ).getBoolean(Preferences.prefDictation, false)
++    }
++
++    /**
++     * With dictation off the service only watches this app, exactly as before. With it on it
++     * also needs to see focus changes in every app to know when a text field is selected.
++     */
++    private fun applyServiceInfo() {
++        val info = serviceInfo ?: AccessibilityServiceInfo()
++        if (isDictationEnabled()) {
++            info.packageNames = null
++            info.eventTypes = AccessibilityEvent.TYPE_VIEW_CLICKED or
++                    AccessibilityEvent.TYPE_VIEW_FOCUSED or
++                    AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
++            if (null == dictation) dictation = SystemDictation(this)
++        } else {
++            info.packageNames = arrayOf(packageName)
++            info.eventTypes = AccessibilityEvent.TYPE_VIEW_CLICKED
++            dictation?.destroy()
++            dictation = null
++        }
+         info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
+         info.notificationTimeout = 100
+         serviceInfo = info
++    }
++
++    override fun onServiceConnected() {
++        applyServiceInfo()
+         isConnected = true
+     }
+ 
+-    override fun onAccessibilityEvent(event: AccessibilityEvent) { }
++    override fun onAccessibilityEvent(event: AccessibilityEvent) {
++        val mic = dictation ?: return
++        if (event.packageName == packageName) return
++        when (event.eventType) {
++            AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
++                val node = event.source
++                if (node != null && isDictationField(node)) mic.show(node) else mic.hide()
++            }
++            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
++                // The keyboard also opens a window; only react to the field that has the focus
++                val focused = try {
++                    rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
++                } catch (_: Exception) { null }
++                if (focused != null && isDictationField(focused)) mic.show(focused) else mic.hide()
++            }
++        }
++    }
++
++    private fun isDictationField(node: AccessibilityNodeInfo): Boolean {
++        return node.isEditable && !node.isPassword && node.isVisibleToUser
++    }
+ 
+     override fun onInterrupt() {
+         if (null == getInstance()) observerInstance = this
+@@ -70,6 +124,8 @@ class AccessibilityObserver : AccessibilityService() {
+ 
+     override fun onUnbind(intent: Intent?): Boolean {
+         isConnected = false
++        dictation?.destroy()
++        dictation = null
+         return super.onUnbind(intent)
+     }
+ }
+diff --git a/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt b/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt
+index 99835d5..9c4624c 100755
+--- a/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt
++++ b/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt
+@@ -662,6 +662,30 @@ class CoverPreferences : AppCompatActivity() {
+             fabSize.isChecked = !fabSize.isChecked
+         }
+ 
++        val dictation = findViewById<AppCompatCheckBox>(R.id.dictation_switch)
++        dictation.isChecked = prefs.getBoolean(Preferences.prefDictation, false)
++        dictation.setOnCheckedChangeListener { _, isChecked ->
++            with(prefs.edit()) {
++                putBoolean(Preferences.prefDictation, isChecked)
++                apply()
++            }
++            AccessibilityObserver.refreshServiceInfo()
++            if (isChecked) {
++                if (!hasAccessibility()) {
++                    Toast.makeText(
++                        this, R.string.dictation_enable_accessibility, Toast.LENGTH_LONG
++                    ).show()
++                }
++                if (!hasPermission(Manifest.permission.RECORD_AUDIO)) {
++                    requestVoice.launch(Manifest.permission.RECORD_AUDIO)
++                }
++            }
++        }
++        findViewById<LinearLayout>(R.id.dictation_row).setOnClickListener {
++            dictation.isChecked = !dictation.isChecked
++        }
++        if (BuildConfig.GOOGLE_PLAY) findViewById<LinearLayout>(R.id.dictation_row).isGone = true
++
+         val vibration = findViewById<AppCompatCheckBox>(R.id.vibration_switch)
+         vibration.isChecked = prefs.getBoolean(Preferences.prefReacts, true)
+         vibration.setOnCheckedChangeListener { _, isChecked ->
+diff --git a/app/src/main/java/com/eightbit/samsprung/settings/Preferences.kt b/app/src/main/java/com/eightbit/samsprung/settings/Preferences.kt
+index a5953c6..572fa96 100644
+--- a/app/src/main/java/com/eightbit/samsprung/settings/Preferences.kt
++++ b/app/src/main/java/com/eightbit/samsprung/settings/Preferences.kt
+@@ -22,4 +22,5 @@ object Preferences {
+     const val prefPaging: String = "prefPaging"
+     const val prefUpdate: String = "prefUpdate"
+     const val prefZoom: String = "prefZoom"
++    const val prefDictation: String = "prefDictation"
+ }
+\ No newline at end of file
+diff --git a/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt b/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
+new file mode 100644
+index 0000000..ca32d55
+--- /dev/null
++++ b/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
+@@ -0,0 +1,181 @@
++package com.eightbit.samsprung.speech
++
++import android.accessibilityservice.AccessibilityService
++import android.content.Context
++import android.content.res.ColorStateList
++import android.graphics.Color
++import android.graphics.PixelFormat
++import android.graphics.Rect
++import android.graphics.drawable.GradientDrawable
++import android.hardware.display.DisplayManager
++import android.os.Bundle
++import android.view.Display
++import android.view.Gravity
++import android.view.View
++import android.view.WindowManager
++import android.view.accessibility.AccessibilityNodeInfo
++import android.widget.ImageView
++import android.widget.Toast
++import com.eightbit.samsprung.R
++
++/**
++ * Floating microphone shown next to the focused text field of any app. It is drawn by the
++ * accessibility service (accessibility overlay window, no extra permission) and writes the
++ * dictated text into the field with ACTION_SET_TEXT.
++ *
++ * All methods must be called from the main thread.
++ */
++class SystemDictation(private val service: AccessibilityService) : DictationHelper.Listener {
++
++    private val dictation = DictationHelper(service, this)
++
++    private var windowManager: WindowManager? = null
++    private var micView: ImageView? = null
++    private var micParams: WindowManager.LayoutParams? = null
++    private var micDisplayId = -1
++
++    private var target: AccessibilityNodeInfo? = null
++    private var baseText: CharSequence = ""
++
++    /** Shows (or moves) the microphone next to [field]. */
++    fun show(field: AccessibilityNodeInfo) {
++        if (dictation.isListening && target?.let { it == field } == true) return
++        target = field
++        val bounds = Rect()
++        field.getBoundsInScreen(bounds)
++        if (bounds.isEmpty) {
++            hide()
++            return
++        }
++        try {
++            val view = ensureView()
++            val wm = windowManager ?: return
++            val params = micParams ?: return
++            val size = params.width
++            val screen = wm.currentWindowMetrics.bounds
++            params.x = (bounds.right - size - margin()).coerceIn(0, (screen.width() - size).coerceAtLeast(0))
++            params.y = (bounds.top - size / 2).coerceIn(0, (screen.height() - size).coerceAtLeast(0))
++            if (view.parent == null) wm.addView(view, params) else wm.updateViewLayout(view, params)
++        } catch (_: Exception) {
++            // The window could not be added (display gone, service shutting down...)
++            micView = null
++        }
++    }
++
++    /** Removes the microphone and stops any dictation in progress. */
++    fun hide() {
++        if (dictation.isListening) dictation.stop()
++        target = null
++        micView?.let {
++            try {
++                if (it.parent != null) windowManager?.removeView(it)
++            } catch (_: Exception) { }
++        }
++    }
++
++    fun destroy() {
++        hide()
++        dictation.destroy()
++        micView = null
++        windowManager = null
++    }
++
++    private fun margin(): Int = (6 * service.resources.displayMetrics.density).toInt()
++
++    private fun pickDisplay(): Display {
++        val dm = service.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
++        val main = dm.getDisplay(Display.DEFAULT_DISPLAY)
++        val cover = dm.getDisplay(1)
++        // Flip phones: when the main display is off the user is typing on the cover display
++        return if (cover != null && main?.state != Display.STATE_ON) cover else main
++    }
++
++    private fun ensureView(): ImageView {
++        val display = pickDisplay()
++        if (micView != null && micDisplayId == display.displayId) return micView!!
++
++        // Display changed (fold / unfold) or first use
++        micView?.let {
++            try {
++                if (it.parent != null) windowManager?.removeView(it)
++            } catch (_: Exception) { }
++        }
++        val context = service.createDisplayContext(display)
++            .createWindowContext(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, null)
++        val density = context.resources.displayMetrics.density
++        val size = (44 * density).toInt()
++
++        val view = ImageView(context).apply {
++            setImageResource(R.drawable.ic_mic_24dp)
++            imageTintList = ColorStateList.valueOf(Color.WHITE)
++            val pad = (10 * density).toInt()
++            setPadding(pad, pad, pad, pad)
++            background = circle(IDLE_COLOR)
++            elevation = 6 * density
++            contentDescription = service.getString(R.string.dictation_mic)
++            setOnClickListener { onMicClicked() }
++        }
++        micParams = WindowManager.LayoutParams(
++            size, size,
++            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
++            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
++                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
++                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
++            PixelFormat.TRANSLUCENT
++        ).apply { gravity = Gravity.TOP or Gravity.START }
++        windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
++        micView = view
++        micDisplayId = display.displayId
++        return view
++    }
++
++    private fun circle(color: Int) = GradientDrawable().apply {
++        shape = GradientDrawable.OVAL
++        setColor(color)
++    }
++
++    private fun onMicClicked() {
++        val field = target ?: return
++        if (dictation.isListening) {
++            dictation.stop()
++            return
++        }
++        field.refresh()
++        // A field showing its hint reports the hint as text
++        baseText = if (field.isShowingHintText) "" else (field.text ?: "")
++        dictation.start()
++    }
++
++    private fun writeText(text: String) {
++        val field = target ?: return
++        field.refresh()
++        val joined = StringBuilder(baseText)
++        if (joined.isNotEmpty() && !joined.last().isWhitespace()) joined.append(' ')
++        joined.append(text)
++        val args = Bundle().apply {
++            putCharSequence(
++                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, joined.toString()
++            )
++        }
++        field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
++    }
++
++    override fun onListening(active: Boolean) {
++        micView?.background = circle(if (active) ACTIVE_COLOR else IDLE_COLOR)
++    }
++
++    override fun onText(text: String, isFinal: Boolean) {
++        writeText(text)
++    }
++
++    override fun onError(code: Int) {
++        DictationHelper.messageFor(code)?.let {
++            Toast.makeText(service, it, Toast.LENGTH_LONG).show()
++        }
++    }
++
++    companion object {
++        private val IDLE_COLOR = Color.parseColor("#6A3DF0")
++        private val ACTIVE_COLOR = Color.parseColor("#E53935")
++    }
++}
+diff --git a/app/src/main/res/layout/prefs_general.xml b/app/src/main/res/layout/prefs_general.xml
+index 6a7f594..5e9d61a 100755
+--- a/app/src/main/res/layout/prefs_general.xml
++++ b/app/src/main/res/layout/prefs_general.xml
+@@ -93,6 +93,37 @@
+             android:drawableEnd="?android:attr/listChoiceIndicatorMultiple" />
+     </LinearLayout>
+ 
++    <LinearLayout
++        android:id="@+id/dictation_row"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:orientation="horizontal"
++        android:layout_marginStart="16dp"
++        android:layout_marginEnd="8dp"
++        android:gravity="center_vertical"
++        android:layout_gravity="center_vertical"
++        tools:ignore="UseCompoundDrawables">
++
++        <TextView
++            android:layout_width="0dp"
++            android:layout_weight="3"
++            android:textSize="24sp"
++            android:textColor="?android:textColorPrimary"
++            android:gravity="center_vertical"
++            android:layout_height="wrap_content"
++            android:text="@string/options_dictation" />
++
++        <androidx.appcompat.widget.AppCompatCheckBox
++            android:id="@+id/dictation_switch"
++            android:layout_width="0dp"
++            android:gravity="center"
++            android:layout_gravity="end|center_vertical"
++            android:layout_weight="1"
++            android:layout_height="wrap_content"
++            android:button="@null"
++            android:drawableEnd="?android:attr/listChoiceIndicatorMultiple" />
++    </LinearLayout>
++
+     <LinearLayout
+         android:id="@+id/theme"
+         android:layout_width="match_parent"
+diff --git a/app/src/main/res/values-es/strings.xml b/app/src/main/res/values-es/strings.xml
+index f623cb3..9a8a646 100644
+--- a/app/src/main/res/values-es/strings.xml
++++ b/app/src/main/res/values-es/strings.xml
+@@ -101,7 +101,7 @@
+ 
+     <string name="accessibility_directions">Pulsa confirmar para abrir Accesibilidad\nAplicaciones instaladas -&gt; External Cover OS Navigation\n -&gt; Activar -&gt; Permitir para habilitar.</string>
+     <string name="accessibility_service">Navegación External Cover OS</string>
+-    <string name="accessibility_details">Habilitar acción de navegación virtual y soporte de hardware.</string>
++    <string name="accessibility_details">Habilitar acción de navegación virtual y soporte de hardware. Opcionalmente muestra un micrófono de dictado en los campos de texto.</string>
+ 
+     <string name="btn_close_tip">Cerrar Launcher</string>
+ 
+@@ -149,4 +149,9 @@
+     <string name="voice_permission_needed">Concede el permiso del micrófono en los ajustes para usar el dictado por voz</string>
+     <string name="voice_unavailable">El reconocimiento de voz no está disponible en este dispositivo</string>
+     <string name="voice_network_error">El dictado por voz necesita conexión a internet</string>
++
++    <!-- System-wide dictation -->
++    <string name="options_dictation">Micrófono de dictado en todas las apps</string>
++    <string name="dictation_enable_accessibility">Activa primero el servicio de accesibilidad para usar el micrófono de dictado</string>
++    <string name="dictation_mic">Dictar</string>
+ </resources>
+\ No newline at end of file
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index cba532f2b..e01c642 100755
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -101,7 +101,7 @@
+ 
+     <string name="accessibility_directions">Click confirm to open Accessibility\n\nInstalled apps -> External Cover OS Navigation\n&#160;&#160;&#160;&#160;-> Toggle switch on -> Allow to enable.</string>
+     <string name="accessibility_service">External Cover OS Navigation</string>
+-    <string name="accessibility_details">Enable virtual navigation action and hardware support.</string>
++    <string name="accessibility_details">Enable virtual navigation action and hardware support. Optionally shows a dictation microphone on text fields.</string>
+ 
+     <string name="btn_close_tip">Close Launcher</string>
+ 
+@@ -149,4 +149,9 @@
+     <string name="voice_permission_needed">Allow microphone access in the settings to use voice dictation</string>
+     <string name="voice_unavailable">Voice recognition is not available on this device</string>
+     <string name="voice_network_error">Voice dictation needs an internet connection</string>
++
++    <!-- System-wide dictation -->
++    <string name="options_dictation">Dictation microphone in all apps</string>
++    <string name="dictation_enable_accessibility">Enable the accessibility service first to use the dictation microphone</string>
++    <string name="dictation_mic">Dictate</string>
+ </resources>
+\ No newline at end of file

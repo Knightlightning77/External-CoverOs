@@ -101,7 +101,7 @@
 
     <string name="accessibility_directions">Pulsa confirmar para abrir Accesibilidad\nAplicaciones instaladas -&gt; External Cover OS Navigation\n -&gt; Activar -&gt; Permitir para habilitar.</string>
     <string name="accessibility_service">Navegación External Cover OS</string>
-    <string name="accessibility_details">Habilitar acción de navegación virtual y soporte de hardware.</string>
+    <string name="accessibility_details">Habilitar acción de navegación virtual y soporte de hardware. Opcionalmente muestra un micrófono de dictado en los campos de texto.</string>
 
     <string name="btn_close_tip">Cerrar Launcher</string>
 
@@ -149,4 +149,9 @@
     <string name="voice_permission_needed">Concede el permiso del micrófono en los ajustes para usar el dictado por voz</string>
     <string name="voice_unavailable">El reconocimiento de voz no está disponible en este dispositivo</string>
     <string name="voice_network_error">El dictado por voz necesita conexión a internet</string>
+
+    <!-- System-wide dictation -->
+    <string name="options_dictation">Micrófono de dictado en todas las apps</string>
+    <string name="dictation_enable_accessibility">Activa primero el servicio de accesibilidad para usar el micrófono de dictado</string>
+    <string name="dictation_mic">Dictar</string>
 </resources>

@@ -21,6 +21,9 @@ import android.content.Intent
 import android.provider.Settings
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
+import com.eightbit.samsprung.settings.Preferences
+import com.eightbit.samsprung.speech.SystemDictation
 import java.io.File
 
 class AccessibilityObserver : AccessibilityService() {
@@ -43,6 +46,11 @@ class AccessibilityObserver : AccessibilityService() {
             getInstance()?.performGlobalAction(GLOBAL_ACTION_BACK)
         }
 
+        /** Applies the current "dictation microphone" setting to the running service. */
+        fun refreshServiceInfo() {
+            getInstance()?.applyServiceInfo()
+        }
+
         fun getWindowManager() : WindowManager {
             return getInstance()?.getSystemService(WINDOW_SERVICE) as WindowManager
         }
@@ -52,17 +60,63 @@ class AccessibilityObserver : AccessibilityService() {
         observerInstance = this
     }
 
-    override fun onServiceConnected() {
-        val info = AccessibilityServiceInfo()
-        info.packageNames = arrayOf(packageName)
-        info.eventTypes = AccessibilityEvent.TYPE_VIEW_CLICKED
+    private var dictation: SystemDictation? = null
+
+    private fun isDictationEnabled(): Boolean {
+        return !BuildConfig.GOOGLE_PLAY && getSharedPreferences(
+            Preferences.prefsValue, Context.MODE_PRIVATE
+        ).getBoolean(Preferences.prefDictation, false)
+    }
+
+    /**
+     * With dictation off the service only watches this app, exactly as before. With it on it
+     * also needs to see focus changes in every app to know when a text field is selected.
+     */
+    private fun applyServiceInfo() {
+        val info = serviceInfo ?: AccessibilityServiceInfo()
+        if (isDictationEnabled()) {
+            info.packageNames = null
+            info.eventTypes = AccessibilityEvent.TYPE_VIEW_CLICKED or
+                    AccessibilityEvent.TYPE_VIEW_FOCUSED or
+                    AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            if (null == dictation) dictation = SystemDictation(this)
+        } else {
+            info.packageNames = arrayOf(packageName)
+            info.eventTypes = AccessibilityEvent.TYPE_VIEW_CLICKED
+            dictation?.destroy()
+            dictation = null
+        }
         info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
         info.notificationTimeout = 100
         serviceInfo = info
+    }
+
+    override fun onServiceConnected() {
+        applyServiceInfo()
         isConnected = true
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent) { }
+    override fun onAccessibilityEvent(event: AccessibilityEvent) {
+        val mic = dictation ?: return
+        if (event.packageName == packageName) return
+        when (event.eventType) {
+            AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
+                val node = event.source
+                if (node != null && isDictationField(node)) mic.show(node) else mic.hide()
+            }
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                // The keyboard also opens a window; only react to the field that has the focus
+                val focused = try {
+                    rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+                } catch (_: Exception) { null }
+                if (focused != null && isDictationField(focused)) mic.show(focused) else mic.hide()
+            }
+        }
+    }
+
+    private fun isDictationField(node: AccessibilityNodeInfo): Boolean {
+        return node.isEditable && !node.isPassword && node.isVisibleToUser
+    }
 
     override fun onInterrupt() {
         if (null == getInstance()) observerInstance = this
@@ -70,6 +124,8 @@ class AccessibilityObserver : AccessibilityService() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         isConnected = false
+        dictation?.destroy()
+        dictation = null
         return super.onUnbind(intent)
     }
 }

@@ -22,4 +22,5 @@ object Preferences {
     const val prefPaging: String = "prefPaging"
     const val prefUpdate: String = "prefUpdate"
     const val prefZoom: String = "prefZoom"
+    const val prefDictation: String = "prefDictation"
 }

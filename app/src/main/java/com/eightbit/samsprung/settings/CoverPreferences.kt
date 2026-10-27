@@ -662,6 +662,30 @@ class CoverPreferences : AppCompatActivity() {
             fabSize.isChecked = !fabSize.isChecked
         }
 
+        val dictation = findViewById<AppCompatCheckBox>(R.id.dictation_switch)
+        dictation.isChecked = prefs.getBoolean(Preferences.prefDictation, false)
+        dictation.setOnCheckedChangeListener { _, isChecked ->
+            with(prefs.edit()) {
+                putBoolean(Preferences.prefDictation, isChecked)
+                apply()
+            }
+            AccessibilityObserver.refreshServiceInfo()
+            if (isChecked) {
+                if (!hasAccessibility()) {
+                    Toast.makeText(
+                        this, R.string.dictation_enable_accessibility, Toast.LENGTH_LONG
+                    ).show()
+                }
+                if (!hasPermission(Manifest.permission.RECORD_AUDIO)) {
+                    requestVoice.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            }
+        }
+        findViewById<LinearLayout>(R.id.dictation_row).setOnClickListener {
+            dictation.isChecked = !dictation.isChecked
+        }
+        if (BuildConfig.GOOGLE_PLAY) findViewById<LinearLayout>(R.id.dictation_row).isGone = true
+
         val vibration = findViewById<AppCompatCheckBox>(R.id.vibration_switch)
         vibration.isChecked = prefs.getBoolean(Preferences.prefReacts, true)
         vibration.setOnCheckedChangeListener { _, isChecked ->

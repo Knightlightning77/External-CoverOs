@@ -101,7 +101,7 @@
 
     <string name="accessibility_directions">Click confirm to open Accessibility\n\nInstalled apps -> External Cover OS Navigation\n&#160;&#160;&#160;&#160;-> Toggle switch on -> Allow to enable.</string>
     <string name="accessibility_service">External Cover OS Navigation</string>
-    <string name="accessibility_details">Enable virtual navigation action and hardware support.</string>
+    <string name="accessibility_details">Enable virtual navigation action and hardware support. Optionally shows a dictation microphone on text fields.</string>
 
     <string name="btn_close_tip">Close Launcher</string>
 
@@ -149,4 +149,9 @@
     <string name="voice_permission_needed">Allow microphone access in the settings to use voice dictation</string>
     <string name="voice_unavailable">Voice recognition is not available on this device</string>
     <string name="voice_network_error">Voice dictation needs an internet connection</string>
+
+    <!-- System-wide dictation -->
+    <string name="options_dictation">Dictation microphone in all apps</string>
+    <string name="dictation_enable_accessibility">Enable the accessibility service first to use the dictation microphone</string>
+    <string name="dictation_mic">Dictate</string>
 </resources>
