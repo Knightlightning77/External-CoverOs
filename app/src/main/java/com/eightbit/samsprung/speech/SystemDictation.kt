@@ -38,7 +38,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
     private var baseText: CharSequence = ""
 
     /** Shows (or moves) the microphone next to [field]. */
-    fun show(field: AccessibilityNodeInfo) {
+    fun show(field: AccessibilityNodeInfo, displayId: Int = -1) {
         if (dictation.isListening && target?.let { it == field } == true) return
         target = field
         val bounds = Rect()
@@ -48,7 +48,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
             return
         }
         try {
-            val view = ensureView()
+            val view = ensureView(displayId)
             val wm = windowManager ?: return
             val params = micParams ?: return
             val size = params.width
@@ -82,16 +82,18 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
 
     private fun margin(): Int = (6 * service.resources.displayMetrics.density).toInt()
 
-    private fun pickDisplay(): Display {
+    private fun pickDisplay(preferred: Int): Display {
         val dm = service.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+        // The display that really holds the field, when the service could find it out
+        if (preferred >= 0) dm.getDisplay(preferred)?.let { return it }
         val main = dm.getDisplay(Display.DEFAULT_DISPLAY)
         val cover = dm.getDisplay(1)
         // Flip phones: when the main display is off the user is typing on the cover display
         return if (cover != null && main?.state != Display.STATE_ON) cover else main
     }
 
-    private fun ensureView(): ImageView {
-        val display = pickDisplay()
+    private fun ensureView(preferred: Int): ImageView {
+        val display = pickDisplay(preferred)
         if (micView != null && micDisplayId == display.displayId) return micView!!
 
         // Display changed (fold / unfold) or first use

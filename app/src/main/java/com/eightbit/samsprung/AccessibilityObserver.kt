@@ -79,6 +79,8 @@ class AccessibilityObserver : AccessibilityService() {
             info.eventTypes = AccessibilityEvent.TYPE_VIEW_CLICKED or
                     AccessibilityEvent.TYPE_VIEW_FOCUSED or
                     AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            // Needed to find out in which display (main or cover) a window is shown
+            info.flags = info.flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
             if (null == dictation) dictation = SystemDictation(this)
         } else {
             info.packageNames = arrayOf(packageName)
@@ -100,22 +102,43 @@ class AccessibilityObserver : AccessibilityService() {
         val mic = dictation ?: return
         if (event.packageName == packageName) return
         when (event.eventType) {
-            AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
+            AccessibilityEvent.TYPE_VIEW_FOCUSED, AccessibilityEvent.TYPE_VIEW_CLICKED -> {
                 val node = event.source
-                if (node != null && isDictationField(node)) mic.show(node) else mic.hide()
+                if (node != null && isDictationField(node)) {
+                    mic.show(node, displayOf(node))
+                } else if (event.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED) {
+                    mic.hide()
+                }
             }
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 // The keyboard also opens a window; only react to the field that has the focus
                 val focused = try {
                     rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
                 } catch (_: Exception) { null }
-                if (focused != null && isDictationField(focused)) mic.show(focused) else mic.hide()
+                if (focused != null && isDictationField(focused)) {
+                    mic.show(focused, displayOf(focused))
+                } else {
+                    mic.hide()
+                }
             }
         }
     }
 
     private fun isDictationField(node: AccessibilityNodeInfo): Boolean {
-        return node.isEditable && !node.isPassword && node.isVisibleToUser
+        return node.isEditable && !node.isPassword
+    }
+
+    /** Display (0 = main, 1 = cover) showing the window of [node], or -1 if unknown. */
+    private fun displayOf(node: AccessibilityNodeInfo): Int {
+        try {
+            val all = windowsOnAllDisplays
+            for (i in 0 until all.size()) {
+                for (window in all.valueAt(i)) {
+                    if (window.id == node.windowId) return all.keyAt(i)
+                }
+            }
+        } catch (_: Exception) { }
+        return -1
     }
 
     override fun onInterrupt() {

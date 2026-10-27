@@ -1,0 +1,117 @@
+diff --git a/app/src/github/res/xml/accessibility_service.xml b/app/src/github/res/xml/accessibility_service.xml
+index a3f0916..76d2ba8 100755
+--- a/app/src/github/res/xml/accessibility_service.xml
++++ b/app/src/github/res/xml/accessibility_service.xml
+@@ -2,6 +2,7 @@
+ <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+     android:accessibilityEventTypes="typeViewClicked|typeViewFocused|typeWindowStateChanged"
+     android:canRetrieveWindowContent="true"
++    android:accessibilityFlags="flagRetrieveInteractiveWindows"
+     android:accessibilityFeedbackType="feedbackGeneric"
+     android:notificationTimeout="100"
+     android:description="@string/accessibility_details"/>
+diff --git a/app/src/main/java/com/eightbit/samsprung/AccessibilityObserver.kt b/app/src/main/java/com/eightbit/samsprung/AccessibilityObserver.kt
+index b1d4310..ba32a04 100755
+--- a/app/src/main/java/com/eightbit/samsprung/AccessibilityObserver.kt
++++ b/app/src/main/java/com/eightbit/samsprung/AccessibilityObserver.kt
+@@ -79,6 +79,8 @@ class AccessibilityObserver : AccessibilityService() {
+             info.eventTypes = AccessibilityEvent.TYPE_VIEW_CLICKED or
+                     AccessibilityEvent.TYPE_VIEW_FOCUSED or
+                     AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
++            // Needed to find out in which display (main or cover) a window is shown
++            info.flags = info.flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+             if (null == dictation) dictation = SystemDictation(this)
+         } else {
+             info.packageNames = arrayOf(packageName)
+@@ -100,22 +102,43 @@ class AccessibilityObserver : AccessibilityService() {
+         val mic = dictation ?: return
+         if (event.packageName == packageName) return
+         when (event.eventType) {
+-            AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
++            AccessibilityEvent.TYPE_VIEW_FOCUSED, AccessibilityEvent.TYPE_VIEW_CLICKED -> {
+                 val node = event.source
+-                if (node != null && isDictationField(node)) mic.show(node) else mic.hide()
++                if (node != null && isDictationField(node)) {
++                    mic.show(node, displayOf(node))
++                } else if (event.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED) {
++                    mic.hide()
++                }
+             }
+             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                 // The keyboard also opens a window; only react to the field that has the focus
+                 val focused = try {
+                     rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+                 } catch (_: Exception) { null }
+-                if (focused != null && isDictationField(focused)) mic.show(focused) else mic.hide()
++                if (focused != null && isDictationField(focused)) {
++                    mic.show(focused, displayOf(focused))
++                } else {
++                    mic.hide()
++                }
+             }
+         }
+     }
+ 
+     private fun isDictationField(node: AccessibilityNodeInfo): Boolean {
+-        return node.isEditable && !node.isPassword && node.isVisibleToUser
++        return node.isEditable && !node.isPassword
++    }
++
++    /** Display (0 = main, 1 = cover) showing the window of [node], or -1 if unknown. */
++    private fun displayOf(node: AccessibilityNodeInfo): Int {
++        try {
++            val all = windowsOnAllDisplays
++            for (i in 0 until all.size()) {
++                for (window in all.valueAt(i)) {
++                    if (window.id == node.windowId) return all.keyAt(i)
++                }
++            }
++        } catch (_: Exception) { }
++        return -1
+     }
+ 
+     override fun onInterrupt() {
+diff --git a/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt b/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
+index ca32d55..d6319f6 100644
+--- a/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
++++ b/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
+@@ -38,7 +38,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+     private var baseText: CharSequence = ""
+ 
+     /** Shows (or moves) the microphone next to [field]. */
+-    fun show(field: AccessibilityNodeInfo) {
++    fun show(field: AccessibilityNodeInfo, displayId: Int = -1) {
+         if (dictation.isListening && target?.let { it == field } == true) return
+         target = field
+         val bounds = Rect()
+@@ -48,7 +48,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+             return
+         }
+         try {
+-            val view = ensureView()
++            val view = ensureView(displayId)
+             val wm = windowManager ?: return
+             val params = micParams ?: return
+             val size = params.width
+@@ -82,16 +82,18 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+ 
+     private fun margin(): Int = (6 * service.resources.displayMetrics.density).toInt()
+ 
+-    private fun pickDisplay(): Display {
++    private fun pickDisplay(preferred: Int): Display {
+         val dm = service.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
++        // The display that really holds the field, when the service could find it out
++        if (preferred >= 0) dm.getDisplay(preferred)?.let { return it }
+         val main = dm.getDisplay(Display.DEFAULT_DISPLAY)
+         val cover = dm.getDisplay(1)
+         // Flip phones: when the main display is off the user is typing on the cover display
+         return if (cover != null && main?.state != Display.STATE_ON) cover else main
+     }
+ 
+-    private fun ensureView(): ImageView {
+-        val display = pickDisplay()
++    private fun ensureView(preferred: Int): ImageView {
++        val display = pickDisplay(preferred)
+         if (micView != null && micDisplayId == display.displayId) return micView!!
+ 
+         // Display changed (fold / unfold) or first use
