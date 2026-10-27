@@ -27,6 +27,15 @@
         android:textSize="14sp" />
 
     <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/reply_voice"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:layout_weight="0"
+        android:contentDescription="@string/voice_dictation"
+        app:srcCompat="@drawable/ic_mic_24dp" />
+
+    <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/send"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

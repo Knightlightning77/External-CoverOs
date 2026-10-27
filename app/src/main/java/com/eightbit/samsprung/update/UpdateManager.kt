@@ -166,6 +166,9 @@ class UpdateManager(private var activity: AppCompatActivity) {
     }
 
     fun requestUpdateJSON() {
+        // This build is customised and is not published in the original project's releases, so
+        // comparing it with them would always report an "update" that replaces these changes.
+        if (!CHECK_UPSTREAM_UPDATES) return
         CoroutineScope(Dispatchers.IO).launch(Dispatchers.IO) {
             JSONExecutor(repo).setResultListener(object : JSONExecutor.ResultListener {
                 override fun onResults(result: String?) {
@@ -209,6 +212,7 @@ class UpdateManager(private var activity: AppCompatActivity) {
     }
 
     companion object {
+        private const val CHECK_UPSTREAM_UPDATES = false
         private const val repo = "https://api.github.com/repos/SamSprung/SamSprung-TooUI/releases/tags/sideload"
     }
 }

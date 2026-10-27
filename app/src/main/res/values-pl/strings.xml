@@ -74,7 +74,7 @@
 
     <string name="sub_button">%1$s Miesięczna darowizna</string>
     <string name="iap_button">%1$s Jednorazowa darowizna</string>
-    <string name="donation_thanks">Dziękujemy za wsparcie TooUI!</string>
+    <string name="donation_thanks">Dziękujemy za wsparcie External Cover OS!</string>
 
     <string name="menu_recent">Ostatnie</string>
     <string name="menu_home">Strona główna</string>
@@ -91,16 +91,16 @@
 
     <string name="tiramisu_bluetooth">Bluetooth ograniczony (Android 13)</string>
 
-    <string name="incompatibility_warning">SamSprung nie jest kompatybilny z aplikacjami, które blokują cały ekran.\nProsimy usunąć lub wyłączyć tę aplikację, aby kontynuować.</string>
-    <string name="cover_switch_warning">Główny przełącznik musi być włączony, aby pojawić się na okładce.\nNaciśnij ponownie przycisk Wstecz, aby wyjść z SamSprung TooUI.</string>
+    <string name="incompatibility_warning">External Cover OS nie jest kompatybilny z aplikacjami, które blokują cały ekran.\nProsimy usunąć lub wyłączyć tę aplikację, aby kontynuować.</string>
+    <string name="cover_switch_warning">Główny przełącznik musi być włączony, aby pojawić się na okładce.\nNaciśnij ponownie przycisk Wstecz, aby wyjść z External Cover OS.</string>
 
     <string name="display_unavailable">Wymaga więcej niż jednego wyświetlacza!</string>
 
     <string name="main_screen_required">Otwórz urządzenie, aby kontynuować</string>
     <string name="incompatible_fragment">Panel nie może zostać usunięty</string>
 
-    <string name="accessibility_directions">Kliknij potwierdź, aby otworzyć Dostępność\n\nZainstalowane aplikacje -&gt; SamSprung Navigation\n -&gt; Włącz przełącznik -&gt; Zezwól, aby włączyć.</string>
-    <string name="accessibility_service">SamSprung Navigation</string>
+    <string name="accessibility_directions">Kliknij potwierdź, aby otworzyć Dostępność\n\nZainstalowane aplikacje -&gt; External Cover OS Navigation\n -&gt; Włącz przełącznik -&gt; Zezwól, aby włączyć.</string>
+    <string name="accessibility_service">External Cover OS Navigation</string>
     <string name="accessibility_details">Włącz wirtualną nawigację i wsparcie sprzętowe.</string>
 
     <string name="btn_close_tip">Zamknij Launcher</string>

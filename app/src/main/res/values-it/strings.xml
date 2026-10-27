@@ -74,7 +74,7 @@
 
     <string name="sub_button">%1$s Donazione mensile</string>
     <string name="iap_button">%1$s Donazione una tantum</string>
-    <string name="donation_thanks">Grazie per aver sostenuto TooUI!</string>
+    <string name="donation_thanks">Grazie per aver sostenuto External Cover OS!</string>
 
     <string name="menu_recent">Recenti</string>
     <string name="menu_home">Casa</string>
@@ -91,8 +91,8 @@
 
     <string name="tiramisu_bluetooth">Bluetooth limitato (Android 13)</string>
 
-    <string name="incompatibility_warning">SamSprung non è compatibile con le applicazioni che bloccano l\'intero schermo.\nPer continuare, rimuovere o disattivare questa applicazione.</string>
-    <string name="cover_switch_warning">L\'interruttore principale deve essere abilitato per apparire sulla copertina.\nPremere nuovamente il tasto indietro per uscire da SamSprung TooUI.</string>
+    <string name="incompatibility_warning">External Cover OS non è compatibile con le applicazioni che bloccano l\'intero schermo.\nPer continuare, rimuovere o disattivare questa applicazione.</string>
+    <string name="cover_switch_warning">L\'interruttore principale deve essere abilitato per apparire sulla copertina.\nPremere nuovamente il tasto indietro per uscire da External Cover OS.</string>
 
     <string name="display_unavailable">Richiede più di un display!</string>
 
@@ -100,7 +100,7 @@
     <string name="incompatible_fragment">Il pannello non può essere cancellato</string>
 
     <string name="accessibility_directions">Fare clic su Conferma per aprire Accessibilità.</string>
-    <string name="accessibility_service">Navigazione SamSprung</string>
+    <string name="accessibility_service">Navigazione External Cover OS</string>
     <string name="accessibility_details">Abilita l\'azione di navigazione virtuale e il supporto hardware.</string>
 
     <string name="btn_close_tip">Chiudere il Launcher</string>

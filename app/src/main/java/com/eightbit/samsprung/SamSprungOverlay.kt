@@ -74,6 +74,7 @@ import com.eightbit.samsprung.drawer.LauncherManager
 import com.eightbit.samsprung.drawer.PanelWidgetManager
 import com.eightbit.samsprung.drawer.panels.*
 import com.eightbit.samsprung.settings.Preferences
+import com.eightbit.samsprung.speech.DictationHelper
 import com.eightbit.samsprung.speech.VoiceRecognizer
 import com.eightbit.samsprung.update.UpdateManager
 import com.eightbit.view.AnimatedLinearLayout
@@ -607,6 +608,7 @@ class SamSprungOverlay : AppCompatActivity() {
             override fun onPageSelected(position: Int) {
                 super.onPageSelected(position)
                 getSearchView()?.isGone = position != 1
+                updateSearchDictationButton(position == 1)
                 setScreenTimeout(findViewById(R.id.bottom_sheet_main))
                 with(prefs.edit()) {
                     putInt(Preferences.prefViewer, position)
@@ -708,6 +710,55 @@ class SamSprungOverlay : AppCompatActivity() {
                 return@setOnLongClickListener true
             }
         }
+
+        setupSearchDictation()
+    }
+
+    private var searchDictation: DictationHelper? = null
+
+    /**
+     * Microphone button next to the search field of the app drawer: dictates the text to search.
+     */
+    private fun setupSearchDictation() {
+        val micButton = findViewById<AppCompatImageView>(R.id.search_voice)
+        val dictation = DictationHelper(applicationContext, object : DictationHelper.Listener {
+            override fun onListening(active: Boolean) {
+                micButton.setImageResource(
+                    if (active) R.drawable.ic_mic_active_24dp else R.drawable.ic_mic_24dp
+                )
+            }
+
+            override fun onText(text: String, isFinal: Boolean) {
+                val searchView = findViewById<SearchView>(R.id.package_search)
+                if (searchView.isIconified) searchView.isIconified = false
+                searchView.setQuery(text, false)
+                // Dictating does not need the keyboard
+                searchView.clearFocus()
+            }
+
+            override fun onError(code: Int) {
+                DictationHelper.messageFor(code)?.let {
+                    Toast.makeText(this@SamSprungOverlay, it, Toast.LENGTH_LONG).show()
+                }
+            }
+        })
+        searchDictation = dictation
+        micButton.setOnClickListener {
+            if (prefs.getBoolean(Preferences.prefReacts, true))
+                vibrator.vibrate(effectClick)
+            dictation.toggle()
+        }
+        updateSearchDictationButton(viewPager.currentItem == 1)
+    }
+
+    /**
+     * The microphone is only shown together with the search field, on the app drawer page.
+     */
+    private fun updateSearchDictationButton(onDrawerPage: Boolean) {
+        findViewById<View>(R.id.search_voice)?.isVisible = onDrawerPage
+                && prefs.getBoolean(Preferences.prefSearch, true)
+                && SpeechRecognizer.isRecognitionAvailable(applicationContext)
+        if (!onDrawerPage) searchDictation?.stop()
     }
 
     private val wifiEnabler = registerForActivityResult(
@@ -1097,7 +1148,7 @@ class SamSprungOverlay : AppCompatActivity() {
             val fakeSnackbar = findViewById<AnimatedLinearLayout>(R.id.update_notice)
             if (!fakeSnackbar.isVisible) {
                 findViewById<TextView>(R.id.update_text).text =
-                    getString(R.string.update_service, organization)
+                    getString(R.string.update_service, appName)
                 animate = TranslateAnimation(
                     0f, 0f, 0f, -fakeSnackbar.height.toFloat()
                 ).apply {
@@ -1177,6 +1228,7 @@ class SamSprungOverlay : AppCompatActivity() {
         findViewById<View>(R.id.bottom_sheet_main).keepScreenOn = false
         try { unregisterReceiver(battReceiver) } catch (_: Exception) { }
         try { unregisterReceiver(offReceiver) } catch (_: Exception) { }
+        searchDictation?.destroy()
         finish()
     }
 

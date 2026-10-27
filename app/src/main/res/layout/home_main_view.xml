@@ -100,6 +100,18 @@
                     android:lineSpacingExtra="0dp"
                     android:lineSpacingMultiplier="0"
                     android:layout_gravity="bottom"/>
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/search_voice"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_gravity="bottom|end"
+                    android:layout_marginBottom="10dp"
+                    android:layout_marginEnd="6dp"
+                    android:padding="8dp"
+                    android:visibility="gone"
+                    android:contentDescription="@string/voice_dictation"
+                    app:srcCompat="@drawable/ic_mic_24dp" />
             </FrameLayout>
 
             <LinearLayout

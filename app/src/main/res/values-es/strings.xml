@@ -74,7 +74,7 @@
 
     <string name="sub_button">%1$s Donación mensual</string>
     <string name="iap_button">%1$s Donación única</string>
-    <string name="donation_thanks">¡Gracias por apoyar TooUI!</string>
+    <string name="donation_thanks">¡Gracias por apoyar External Cover OS!</string>
 
     <string name="menu_recent">Reciente</string>
     <string name="menu_home">Inicio</string>
@@ -91,16 +91,16 @@
 
     <string name="tiramisu_bluetooth">Bluetooth restringido (Android 13)</string>
 
-    <string name="incompatibility_warning">SamSprung no es compatible con aplicaciones que bloquean toda la pantalla.\nPor favor, elimina o desactiva esta aplicación para continuar.</string>
-    <string name="cover_switch_warning">El interruptor principal debe estar activado para que aparezca en la cubierta.\NPulsa de nuevo el botón atrás para salir de SamSprung TooUI.</string>
+    <string name="incompatibility_warning">External Cover OS no es compatible con aplicaciones que bloquean toda la pantalla.\nPor favor, elimina o desactiva esta aplicación para continuar.</string>
+    <string name="cover_switch_warning">El interruptor principal debe estar activado para que aparezca en la cubierta.\NPulsa de nuevo el botón atrás para salir de External Cover OS.</string>
 
     <string name="display_unavailable">¡Necesita más de una pantalla!</string>
 
     <string name="main_screen_required">Abre el dispositivo para continuar</string>
     <string name="incompatible_fragment">El panel no se puede borrar</string>
 
-    <string name="accessibility_directions">Pulsa confirmar para abrir Accesibilidad\nAplicaciones instaladas -&gt; SamSprung Navigation\n -&gt; Activar -&gt; Permitir para habilitar.</string>
-    <string name="accessibility_service">Navegación SamSprung</string>
+    <string name="accessibility_directions">Pulsa confirmar para abrir Accesibilidad\nAplicaciones instaladas -&gt; External Cover OS Navigation\n -&gt; Activar -&gt; Permitir para habilitar.</string>
+    <string name="accessibility_service">Navegación External Cover OS</string>
     <string name="accessibility_details">Habilitar acción de navegación virtual y soporte de hardware.</string>
 
     <string name="btn_close_tip">Cerrar Launcher</string>
@@ -143,4 +143,10 @@
     <string name="widget_manager_menu">Widgets</string>
     <string name="widget_shortcut_short">Widgets</string>
     <string name="widget_shortcut_long">Gestionar widgets de la pantalla externa</string>
+
+    <!-- Voice dictation -->
+    <string name="voice_dictation">Dictado por voz</string>
+    <string name="voice_permission_needed">Concede el permiso del micrófono en los ajustes para usar el dictado por voz</string>
+    <string name="voice_unavailable">El reconocimiento de voz no está disponible en este dispositivo</string>
+    <string name="voice_network_error">El dictado por voz necesita conexión a internet</string>
 </resources>

@@ -1,0 +1,718 @@
+diff --git a/app/src/main/java/com/eightbit/samsprung/OnBroadcastService.kt b/app/src/main/java/com/eightbit/samsprung/OnBroadcastService.kt
+index e424041..e66c9f6 100755
+--- a/app/src/main/java/com/eightbit/samsprung/OnBroadcastService.kt
++++ b/app/src/main/java/com/eightbit/samsprung/OnBroadcastService.kt
+@@ -100,18 +100,18 @@ class OnBroadcastService : Service() {
+         var group = mNotificationManager.getNotificationChannelGroup("tooui_services")
+         if (null == group) {
+             mNotificationManager.createNotificationChannelGroup(
+-                NotificationChannelGroup("tooui_services", "SamSprung Services")
++                NotificationChannelGroup("tooui_services", "$appName Services")
+             )
+             group = mNotificationManager.getNotificationChannelGroup("tooui_services")
+         }
+         val notificationChannel = NotificationChannel("tooui_overlay_channel",
+-            "TooUI Overlay Notification", NotificationManager.IMPORTANCE_LOW)
++            "$appName Overlay Notification", NotificationManager.IMPORTANCE_LOW)
+         notificationChannel.enableLights(false)
+         notificationChannel.lockscreenVisibility = Notification.VISIBILITY_SECRET
+         mNotificationManager.createNotificationChannel(notificationChannel)
+         val builder = NotificationCompat.Builder(this, "tooui_overlay_channel")
+ 
+-        val notificationText = getString(R.string.overlay_service, organization)
++        val notificationText = getString(R.string.overlay_service, appName)
+         builder.setContentTitle(notificationText).setTicker(notificationText)
+             .setSmallIcon(R.drawable.ic_samsprung_24dp)
+             .setPriority(NotificationCompat.PRIORITY_LOW)
+diff --git a/app/src/main/java/com/eightbit/samsprung/SamSprung.kt b/app/src/main/java/com/eightbit/samsprung/SamSprung.kt
+index 3c717db..073c22a 100755
+--- a/app/src/main/java/com/eightbit/samsprung/SamSprung.kt
++++ b/app/src/main/java/com/eightbit/samsprung/SamSprung.kt
+@@ -26,6 +26,9 @@ import kotlin.system.exitProcess
+ 
+ const val organization = "SamSprung"
+ 
++/** Name shown to the user wherever the app is named. */
++const val appName = "External Cover OS"
++
+ class SamSprung : Application() {
+ 
+     fun setThemePreference() {
+diff --git a/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt b/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt
+index ac08285..f62d722 100755
+--- a/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt
++++ b/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt
+@@ -74,6 +74,7 @@ import com.eightbit.samsprung.drawer.LauncherManager
+ import com.eightbit.samsprung.drawer.PanelWidgetManager
+ import com.eightbit.samsprung.drawer.panels.*
+ import com.eightbit.samsprung.settings.Preferences
++import com.eightbit.samsprung.speech.DictationHelper
+ import com.eightbit.samsprung.speech.VoiceRecognizer
+ import com.eightbit.samsprung.update.UpdateManager
+ import com.eightbit.view.AnimatedLinearLayout
+@@ -607,6 +608,7 @@ class SamSprungOverlay : AppCompatActivity() {
+             override fun onPageSelected(position: Int) {
+                 super.onPageSelected(position)
+                 getSearchView()?.isGone = position != 1
++                updateSearchDictationButton(position == 1)
+                 setScreenTimeout(findViewById(R.id.bottom_sheet_main))
+                 with(prefs.edit()) {
+                     putInt(Preferences.prefViewer, position)
+@@ -708,6 +710,55 @@ class SamSprungOverlay : AppCompatActivity() {
+                 return@setOnLongClickListener true
+             }
+         }
++
++        setupSearchDictation()
++    }
++
++    private var searchDictation: DictationHelper? = null
++
++    /**
++     * Microphone button next to the search field of the app drawer: dictates the text to search.
++     */
++    private fun setupSearchDictation() {
++        val micButton = findViewById<AppCompatImageView>(R.id.search_voice)
++        val dictation = DictationHelper(applicationContext, object : DictationHelper.Listener {
++            override fun onListening(active: Boolean) {
++                micButton.setImageResource(
++                    if (active) R.drawable.ic_mic_active_24dp else R.drawable.ic_mic_24dp
++                )
++            }
++
++            override fun onText(text: String, isFinal: Boolean) {
++                val searchView = findViewById<SearchView>(R.id.package_search)
++                if (searchView.isIconified) searchView.isIconified = false
++                searchView.setQuery(text, false)
++                // Dictating does not need the keyboard
++                searchView.clearFocus()
++            }
++
++            override fun onError(code: Int) {
++                DictationHelper.messageFor(code)?.let {
++                    Toast.makeText(this@SamSprungOverlay, it, Toast.LENGTH_LONG).show()
++                }
++            }
++        })
++        searchDictation = dictation
++        micButton.setOnClickListener {
++            if (prefs.getBoolean(Preferences.prefReacts, true))
++                vibrator.vibrate(effectClick)
++            dictation.toggle()
++        }
++        updateSearchDictationButton(viewPager.currentItem == 1)
++    }
++
++    /**
++     * The microphone is only shown together with the search field, on the app drawer page.
++     */
++    private fun updateSearchDictationButton(onDrawerPage: Boolean) {
++        findViewById<View>(R.id.search_voice)?.isVisible = onDrawerPage
++                && prefs.getBoolean(Preferences.prefSearch, true)
++                && SpeechRecognizer.isRecognitionAvailable(applicationContext)
++        if (!onDrawerPage) searchDictation?.stop()
+     }
+ 
+     private val wifiEnabler = registerForActivityResult(
+@@ -1097,7 +1148,7 @@ class SamSprungOverlay : AppCompatActivity() {
+             val fakeSnackbar = findViewById<AnimatedLinearLayout>(R.id.update_notice)
+             if (!fakeSnackbar.isVisible) {
+                 findViewById<TextView>(R.id.update_text).text =
+-                    getString(R.string.update_service, organization)
++                    getString(R.string.update_service, appName)
+                 animate = TranslateAnimation(
+                     0f, 0f, 0f, -fakeSnackbar.height.toFloat()
+                 ).apply {
+@@ -1177,6 +1228,7 @@ class SamSprungOverlay : AppCompatActivity() {
+         findViewById<View>(R.id.bottom_sheet_main).keepScreenOn = false
+         try { unregisterReceiver(battReceiver) } catch (_: Exception) { }
+         try { unregisterReceiver(offReceiver) } catch (_: Exception) { }
++        searchDictation?.destroy()
+         finish()
+     }
+ 
+diff --git a/app/src/main/java/com/eightbit/samsprung/drawer/AppDisplayListener.kt b/app/src/main/java/com/eightbit/samsprung/drawer/AppDisplayListener.kt
+index cbb3408..d7ec1b9 100755
+--- a/app/src/main/java/com/eightbit/samsprung/drawer/AppDisplayListener.kt
++++ b/app/src/main/java/com/eightbit/samsprung/drawer/AppDisplayListener.kt
+@@ -285,7 +285,7 @@ class AppDisplayListener : Service() {
+         var group = mNotificationManager.getNotificationChannelGroup("tooui_services")
+         if (null == group) {
+             mNotificationManager.createNotificationChannelGroup(
+-                NotificationChannelGroup("tooui_services", "SamSprung Services")
++                NotificationChannelGroup("tooui_services", "$appName Services")
+             )
+             group = mNotificationManager.getNotificationChannelGroup("tooui_services")
+         }
+@@ -296,7 +296,7 @@ class AppDisplayListener : Service() {
+         mNotificationManager.createNotificationChannel(notificationChannel)
+         val builder = NotificationCompat.Builder(this, "display_channel")
+ 
+-        val notificationText = getString(R.string.display_service, organization)
++        val notificationText = getString(R.string.display_service, appName)
+         builder.setContentTitle(notificationText).setTicker(notificationText)
+             .setSmallIcon(R.drawable.ic_samsprung_24dp)
+             .setPriority(NotificationCompat.PRIORITY_LOW)
+diff --git a/app/src/main/java/com/eightbit/samsprung/drawer/NotificationFragment.kt b/app/src/main/java/com/eightbit/samsprung/drawer/NotificationFragment.kt
+index 6784e0a..d6f5115 100755
+--- a/app/src/main/java/com/eightbit/samsprung/drawer/NotificationFragment.kt
++++ b/app/src/main/java/com/eightbit/samsprung/drawer/NotificationFragment.kt
+@@ -53,6 +53,7 @@ import com.eightbit.samsprung.R
+ import com.eightbit.samsprung.SamSprung
+ import com.eightbit.samsprung.SamSprungOverlay
+ import com.eightbit.samsprung.settings.Preferences
++import com.eightbit.samsprung.speech.DictationHelper
+ import com.eightbit.view.OnSwipeTouchListener
+ import com.eightbit.widget.RecyclerViewTouch
+ import java.util.*
+@@ -148,7 +149,35 @@ class NotificationFragment : Fragment(), NotificationAdapter.OnNoticeClickListen
+                 val dialog = AlertDialog.Builder(
+                     ContextThemeWrapper(requireActivity(), R.style.Theme_SecondScreen_NoActionBar)
+                 )
++                var dictation: DictationHelper? = null
+                 view.findViewById<LinearLayout>(R.id.entries).run {
++                    val replyField = findViewById<EditText>(R.id.reply)
++                    val micButton = findViewById<AppCompatImageView>(R.id.reply_voice)
++                    dictation = DictationHelper(requireContext(), object : DictationHelper.Listener {
++                        // What was already written before dictating, so it is not lost
++                        private var written = ""
++
++                        override fun onListening(active: Boolean) {
++                            if (active) written = replyField.text.toString().trimEnd()
++                            micButton.setImageResource(
++                                if (active) R.drawable.ic_mic_active_24dp else R.drawable.ic_mic_24dp
++                            )
++                        }
++
++                        override fun onText(text: String, isFinal: Boolean) {
++                            val prefix = if (written.isEmpty()) "" else "$written "
++                            replyField.setText(prefix + text)
++                            replyField.setSelection(replyField.text.length)
++                        }
++
++                        override fun onError(code: Int) {
++                            DictationHelper.messageFor(code)?.let {
++                                Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show()
++                            }
++                        }
++                    })
++                    micButton.isVisible = dictation?.isAvailable == true
++                    micButton.setOnClickListener { dictation?.toggle() }
+                     findViewById<AppCompatImageView>(R.id.send).setOnClickListener {
+                         val reply = findViewById<EditText>(R.id.reply)
+                         val replyIntent = Intent()
+@@ -164,6 +193,7 @@ class NotificationFragment : Fragment(), NotificationAdapter.OnNoticeClickListen
+                         replyDialog?.dismiss()
+                     }
+                 }
++                dialog.setOnDismissListener { dictation?.destroy() }
+                 replyDialog = dialog.setView(view).show()
+                 replyDialog.window?.setLayout(
+                     LinearLayout.LayoutParams.MATCH_PARENT,
+diff --git a/app/src/main/java/com/eightbit/samsprung/speech/DictationHelper.kt b/app/src/main/java/com/eightbit/samsprung/speech/DictationHelper.kt
+new file mode 100644
+index 0000000..19b11a1
+--- /dev/null
++++ b/app/src/main/java/com/eightbit/samsprung/speech/DictationHelper.kt
+@@ -0,0 +1,157 @@
++package com.eightbit.samsprung.speech
++
++import android.Manifest
++import android.content.Context
++import android.content.Intent
++import android.content.pm.PackageManager
++import android.os.Bundle
++import android.speech.RecognitionListener
++import android.speech.RecognizerIntent
++import android.speech.SpeechRecognizer
++import androidx.annotation.StringRes
++import androidx.core.content.ContextCompat
++import com.eightbit.samsprung.BuildConfig
++import com.eightbit.samsprung.R
++import java.util.Locale
++
++/**
++ * Voice dictation for the text fields of the app. Results are delivered while the user speaks
++ * (partial results) and once more when the recognizer decides the sentence is finished.
++ *
++ * All methods must be called from the main thread.
++ */
++class DictationHelper(
++    context: Context,
++    private val listener: Listener
++) {
++    interface Listener {
++        /** The microphone started (true) or stopped (false) listening. */
++        fun onListening(active: Boolean)
++
++        /** Recognized text. [isFinal] is false for partial results that may still change. */
++        fun onText(text: String, isFinal: Boolean)
++
++        /** Something prevented the dictation. See [messageFor] for a message to show. */
++        fun onError(code: Int)
++    }
++
++    private val context: Context = context.applicationContext
++    private var recognizer: SpeechRecognizer? = null
++
++    var isListening = false
++        private set
++
++    val isAvailable: Boolean
++        get() = SpeechRecognizer.isRecognitionAvailable(context)
++
++    fun hasPermission(): Boolean = ContextCompat.checkSelfPermission(
++        context, Manifest.permission.RECORD_AUDIO
++    ) == PackageManager.PERMISSION_GRANTED
++
++    fun toggle() {
++        if (isListening) stop() else start()
++    }
++
++    fun start() {
++        if (!hasPermission()) {
++            listener.onError(ERROR_PERMISSION)
++            return
++        }
++        if (!isAvailable) {
++            listener.onError(ERROR_UNAVAILABLE)
++            return
++        }
++        destroy()
++        val speech = SpeechRecognizer.createSpeechRecognizer(context)
++        recognizer = speech
++        speech.setRecognitionListener(object : RecognitionListener {
++            override fun onReadyForSpeech(params: Bundle?) {
++                setListening(true)
++            }
++
++            override fun onBeginningOfSpeech() { }
++
++            override fun onRmsChanged(rmsdB: Float) { }
++
++            override fun onBufferReceived(buffer: ByteArray?) { }
++
++            override fun onEndOfSpeech() {
++                setListening(false)
++            }
++
++            override fun onError(error: Int) {
++                setListening(false)
++                // Nothing said or nothing understood is not worth interrupting the user
++                if (error != SpeechRecognizer.ERROR_NO_MATCH
++                    && error != SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
++                    listener.onError(error)
++                }
++            }
++
++            override fun onResults(results: Bundle?) {
++                setListening(false)
++                firstResult(results)?.let { listener.onText(it, true) }
++            }
++
++            override fun onPartialResults(partialResults: Bundle?) {
++                firstResult(partialResults)?.let { listener.onText(it, false) }
++            }
++
++            override fun onEvent(eventType: Int, params: Bundle?) { }
++        })
++        speech.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
++            putExtra(
++                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
++                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
++            )
++            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
++            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, BuildConfig.APPLICATION_ID)
++            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
++            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
++        })
++    }
++
++    fun stop() {
++        recognizer?.stopListening()
++        setListening(false)
++    }
++
++    /** Releases the recognizer. Call it when the screen using the helper goes away. */
++    fun destroy() {
++        recognizer?.let {
++            try {
++                it.cancel()
++                it.destroy()
++            } catch (_: Exception) { }
++        }
++        recognizer = null
++        setListening(false)
++    }
++
++    private fun setListening(active: Boolean) {
++        if (isListening == active) return
++        isListening = active
++        listener.onListening(active)
++    }
++
++    private fun firstResult(bundle: Bundle?): String? {
++        return bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
++            ?.firstOrNull()?.takeIf { it.isNotBlank() }
++    }
++
++    companion object {
++        const val ERROR_PERMISSION = -1
++        const val ERROR_UNAVAILABLE = -2
++
++        /** Message to show the user for an error code, or null if it is not worth showing. */
++        @StringRes
++        fun messageFor(code: Int): Int? = when (code) {
++            ERROR_PERMISSION, SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
++                R.string.voice_permission_needed
++            ERROR_UNAVAILABLE -> R.string.voice_unavailable
++            SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
++                R.string.voice_network_error
++            else -> null
++        }
++    }
++}
+diff --git a/app/src/main/java/com/eightbit/samsprung/update/UpdateManager.kt b/app/src/main/java/com/eightbit/samsprung/update/UpdateManager.kt
+index 1d89d06..560fb1a 100755
+--- a/app/src/main/java/com/eightbit/samsprung/update/UpdateManager.kt
++++ b/app/src/main/java/com/eightbit/samsprung/update/UpdateManager.kt
+@@ -166,6 +166,9 @@ class UpdateManager(private var activity: AppCompatActivity) {
+     }
+ 
+     fun requestUpdateJSON() {
++        // This build is customised and is not published in the original project's releases, so
++        // comparing it with them would always report an "update" that replaces these changes.
++        if (!CHECK_UPSTREAM_UPDATES) return
+         CoroutineScope(Dispatchers.IO).launch(Dispatchers.IO) {
+             JSONExecutor(repo).setResultListener(object : JSONExecutor.ResultListener {
+                 override fun onResults(result: String?) {
+@@ -209,6 +212,7 @@ class UpdateManager(private var activity: AppCompatActivity) {
+     }
+ 
+     companion object {
++        private const val CHECK_UPSTREAM_UPDATES = false
+         private const val repo = "https://api.github.com/repos/SamSprung/SamSprung-TooUI/releases/tags/sideload"
+     }
+ }
+diff --git a/app/src/main/res/drawable/ic_mic_24dp.xml b/app/src/main/res/drawable/ic_mic_24dp.xml
+new file mode 100644
+index 0000000..3a7c43f
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_mic_24dp.xml
+@@ -0,0 +1,5 @@
++<vector android:height="24dp" android:tint="?android:attr/textColorPrimary"
++    android:viewportHeight="24" android:viewportWidth="24"
++    android:width="24dp" xmlns:android="http://schemas.android.com/apk/res/android">
++    <path android:fillColor="@android:color/black" android:pathData="M12,14c1.66,0 3,-1.34 3,-3V5c0,-1.66 -1.34,-3 -3,-3S9,3.34 9,5v6c0,1.66 1.34,3 3,3zM17.3,11c0,3 -2.54,5.1 -5.3,5.1S6.7,14 6.7,11H5c0,3.41 2.72,6.23 6,6.72V21h2v-3.28c3.28,-0.48 6,-3.3 6,-6.72h-1.7z"/>
++</vector>
+diff --git a/app/src/main/res/drawable/ic_mic_active_24dp.xml b/app/src/main/res/drawable/ic_mic_active_24dp.xml
+new file mode 100644
+index 0000000..f08375c
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_mic_active_24dp.xml
+@@ -0,0 +1,5 @@
++<vector android:height="24dp"
++    android:viewportHeight="24" android:viewportWidth="24"
++    android:width="24dp" xmlns:android="http://schemas.android.com/apk/res/android">
++    <path android:fillColor="#FFE53935" android:pathData="M12,14c1.66,0 3,-1.34 3,-3V5c0,-1.66 -1.34,-3 -3,-3S9,3.34 9,5v6c0,1.66 1.34,3 3,3zM17.3,11c0,3 -2.54,5.1 -5.3,5.1S6.7,14 6.7,11H5c0,3.41 2.72,6.23 6,6.72V21h2v-3.28c3.28,-0.48 6,-3.3 6,-6.72h-1.7z"/>
++</vector>
+diff --git a/app/src/main/res/layout/home_main_view.xml b/app/src/main/res/layout/home_main_view.xml
+index 9bf16f4..4864c4c 100755
+--- a/app/src/main/res/layout/home_main_view.xml
++++ b/app/src/main/res/layout/home_main_view.xml
+@@ -100,6 +100,18 @@
+                     android:lineSpacingExtra="0dp"
+                     android:lineSpacingMultiplier="0"
+                     android:layout_gravity="bottom"/>
++
++                <androidx.appcompat.widget.AppCompatImageView
++                    android:id="@+id/search_voice"
++                    android:layout_width="40dp"
++                    android:layout_height="40dp"
++                    android:layout_gravity="bottom|end"
++                    android:layout_marginBottom="10dp"
++                    android:layout_marginEnd="6dp"
++                    android:padding="8dp"
++                    android:visibility="gone"
++                    android:contentDescription="@string/voice_dictation"
++                    app:srcCompat="@drawable/ic_mic_24dp" />
+             </FrameLayout>
+ 
+             <LinearLayout
+diff --git a/app/src/main/res/layout/notification_reply.xml b/app/src/main/res/layout/notification_reply.xml
+index 4e9e014..5666050 100755
+--- a/app/src/main/res/layout/notification_reply.xml
++++ b/app/src/main/res/layout/notification_reply.xml
+@@ -26,6 +26,15 @@
+         android:singleLine="true"
+         android:textSize="14sp" />
+ 
++    <androidx.appcompat.widget.AppCompatImageView
++        android:id="@+id/reply_voice"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:gravity="center_vertical"
++        android:layout_weight="0"
++        android:contentDescription="@string/voice_dictation"
++        app:srcCompat="@drawable/ic_mic_24dp" />
++
+     <androidx.appcompat.widget.AppCompatImageView
+         android:id="@+id/send"
+         android:layout_width="wrap_content"
+diff --git a/app/src/main/res/values-de/strings.xml b/app/src/main/res/values-de/strings.xml
+index e8168ba..32c441e 100644
+--- a/app/src/main/res/values-de/strings.xml
++++ b/app/src/main/res/values-de/strings.xml
+@@ -74,7 +74,7 @@
+ 
+     <string name="sub_button">%1$s Monatliche Spende</string>
+     <string name="iap_button">%1$s Einmalige Spende</string>
+-    <string name="donation_thanks">Vielen Dank für die Unterstützung von TooUI!</string>
++    <string name="donation_thanks">Vielen Dank für die Unterstützung von External Cover OS!</string>
+ 
+     <string name="menu_recent">Zuletzt</string>
+     <string name="menu_home">Startseite</string>
+@@ -91,16 +91,16 @@
+ 
+     <string name="tiramisu_bluetooth">Bluetooth eingeschränkt (Android 13)</string>
+ 
+-    <string name="incompatibility_warning">SamSprung ist nicht kompatibel mit Apps, die den gesamten Bildschirm blockieren.\Bitte entfernen oder deaktivieren Sie diese App, um fortzufahren.</string>
+-    <string name="cover_switch_warning">Der Hauptschalter muss aktiviert sein, damit er auf dem Cover erscheint.\nDrücken Sie die Zurück-Taste erneut, um SamSprung TooUI zu beenden.</string>
++    <string name="incompatibility_warning">External Cover OS ist nicht kompatibel mit Apps, die den gesamten Bildschirm blockieren.\Bitte entfernen oder deaktivieren Sie diese App, um fortzufahren.</string>
++    <string name="cover_switch_warning">Der Hauptschalter muss aktiviert sein, damit er auf dem Cover erscheint.\nDrücken Sie die Zurück-Taste erneut, um External Cover OS zu beenden.</string>
+ 
+     <string name="display_unavailable">Benötigt mehr als ein Display!</string>
+ 
+     <string name="main_screen_required">Öffnen Sie das Gerät, um fortzufahren.</string>
+     <string name="incompatible_fragment">Panel kann nicht gelöscht werden</string>
+ 
+-    <string name="accessibility_directions">Klicken Sie auf Bestätigen, um die Eingabehilfen zu öffnen\n\nInstallierte Anwendungen -&gt; SamSprung Navigation\n -&gt; Schalter einschalten -&gt; Zulassen zum Aktivieren.</string>
+-    <string name="accessibility_service">SamSprung Navigation</string>
++    <string name="accessibility_directions">Klicken Sie auf Bestätigen, um die Eingabehilfen zu öffnen\n\nInstallierte Anwendungen -&gt; External Cover OS Navigation\n -&gt; Schalter einschalten -&gt; Zulassen zum Aktivieren.</string>
++    <string name="accessibility_service">External Cover OS Navigation</string>
+     <string name="accessibility_details">Aktivieren Sie die virtuelle Navigationsaktion und die Hardware-Unterstützung.</string>
+ 
+     <string name="btn_close_tip">Launcher schließen</string>
+diff --git a/app/src/main/res/values-es/strings.xml b/app/src/main/res/values-es/strings.xml
+index 74805d1..f623cb3 100644
+--- a/app/src/main/res/values-es/strings.xml
++++ b/app/src/main/res/values-es/strings.xml
+@@ -74,7 +74,7 @@
+ 
+     <string name="sub_button">%1$s Donación mensual</string>
+     <string name="iap_button">%1$s Donación única</string>
+-    <string name="donation_thanks">¡Gracias por apoyar TooUI!</string>
++    <string name="donation_thanks">¡Gracias por apoyar External Cover OS!</string>
+ 
+     <string name="menu_recent">Reciente</string>
+     <string name="menu_home">Inicio</string>
+@@ -91,16 +91,16 @@
+ 
+     <string name="tiramisu_bluetooth">Bluetooth restringido (Android 13)</string>
+ 
+-    <string name="incompatibility_warning">SamSprung no es compatible con aplicaciones que bloquean toda la pantalla.\nPor favor, elimina o desactiva esta aplicación para continuar.</string>
+-    <string name="cover_switch_warning">El interruptor principal debe estar activado para que aparezca en la cubierta.\NPulsa de nuevo el botón atrás para salir de SamSprung TooUI.</string>
++    <string name="incompatibility_warning">External Cover OS no es compatible con aplicaciones que bloquean toda la pantalla.\nPor favor, elimina o desactiva esta aplicación para continuar.</string>
++    <string name="cover_switch_warning">El interruptor principal debe estar activado para que aparezca en la cubierta.\NPulsa de nuevo el botón atrás para salir de External Cover OS.</string>
+ 
+     <string name="display_unavailable">¡Necesita más de una pantalla!</string>
+ 
+     <string name="main_screen_required">Abre el dispositivo para continuar</string>
+     <string name="incompatible_fragment">El panel no se puede borrar</string>
+ 
+-    <string name="accessibility_directions">Pulsa confirmar para abrir Accesibilidad\nAplicaciones instaladas -&gt; SamSprung Navigation\n -&gt; Activar -&gt; Permitir para habilitar.</string>
+-    <string name="accessibility_service">Navegación SamSprung</string>
++    <string name="accessibility_directions">Pulsa confirmar para abrir Accesibilidad\nAplicaciones instaladas -&gt; External Cover OS Navigation\n -&gt; Activar -&gt; Permitir para habilitar.</string>
++    <string name="accessibility_service">Navegación External Cover OS</string>
+     <string name="accessibility_details">Habilitar acción de navegación virtual y soporte de hardware.</string>
+ 
+     <string name="btn_close_tip">Cerrar Launcher</string>
+@@ -143,4 +143,10 @@
+     <string name="widget_manager_menu">Widgets</string>
+     <string name="widget_shortcut_short">Widgets</string>
+     <string name="widget_shortcut_long">Gestionar widgets de la pantalla externa</string>
++
++    <!-- Voice dictation -->
++    <string name="voice_dictation">Dictado por voz</string>
++    <string name="voice_permission_needed">Concede el permiso del micrófono en los ajustes para usar el dictado por voz</string>
++    <string name="voice_unavailable">El reconocimiento de voz no está disponible en este dispositivo</string>
++    <string name="voice_network_error">El dictado por voz necesita conexión a internet</string>
+ </resources>
+\ No newline at end of file
+diff --git a/app/src/main/res/values-fr/strings.xml b/app/src/main/res/values-fr/strings.xml
+index bf7f1e2..3ec9608 100644
+--- a/app/src/main/res/values-fr/strings.xml
++++ b/app/src/main/res/values-fr/strings.xml
+@@ -74,7 +74,7 @@
+ 
+     <string name="sub_button">%1$s Donation mensuelle</string>
+     <string name="iap_button">%1$s Donation unique</string>
+-    <string name="donation_thanks">Merci de soutenir TooUI !</string>
++    <string name="donation_thanks">Merci de soutenir External Cover OS !</string>
+ 
+     <string name="menu_recent">Récent</string>
+     <string name="menu_home">Accueil</string>
+@@ -91,16 +91,16 @@
+ 
+     <string name="tiramisu_bluetooth">Bluetooth restreint (Android 13)</string>
+ 
+-    <string name="incompatibility_warning">SamSprung n\'est pas compatible avec les applications qui bloquent tout l\'écran.\NVeuillez supprimer ou désactiver cette application pour continuer.</string>
+-    <string name="cover_switch_warning">L\'interrupteur principal doit être activé pour apparaître sur le couvercle.\NAppuyez à nouveau sur le bouton retour pour quitter SamSprung TooUI.</string>
++    <string name="incompatibility_warning">External Cover OS n\'est pas compatible avec les applications qui bloquent tout l\'écran.\NVeuillez supprimer ou désactiver cette application pour continuer.</string>
++    <string name="cover_switch_warning">L\'interrupteur principal doit être activé pour apparaître sur le couvercle.\NAppuyez à nouveau sur le bouton retour pour quitter External Cover OS.</string>
+ 
+     <string name="display_unavailable">Requiert plus d\'un écran !</string>
+ 
+     <string name="main_screen_required">Ouvrez l\'appareil pour continuer</string>
+     <string name="incompatible_fragment">Le panneau ne peut pas être supprimé</string>
+ 
+-    <string name="accessibility_directions">Cliquez sur confirmer pour ouvrir Accessibilité -&gt; Applications installées -&gt; SamSprung Navigation -&gt; Basculer l\'interrupteur sur -&gt; Autoriser pour activer.</string>
+-    <string name="accessibility_service">SamSprung Navigation</string>
++    <string name="accessibility_directions">Cliquez sur confirmer pour ouvrir Accessibilité -&gt; Applications installées -&gt; External Cover OS Navigation -&gt; Basculer l\'interrupteur sur -&gt; Autoriser pour activer.</string>
++    <string name="accessibility_service">External Cover OS Navigation</string>
+     <string name="accessibility_details">Activer l\'action de navigation virtuelle et le support matériel.</string>
+ 
+     <string name="btn_close_tip">Fermer le lanceur</string>
+diff --git a/app/src/main/res/values-it/strings.xml b/app/src/main/res/values-it/strings.xml
+index 1f123f5..e579e3e 100644
+--- a/app/src/main/res/values-it/strings.xml
++++ b/app/src/main/res/values-it/strings.xml
+@@ -74,7 +74,7 @@
+ 
+     <string name="sub_button">%1$s Donazione mensile</string>
+     <string name="iap_button">%1$s Donazione una tantum</string>
+-    <string name="donation_thanks">Grazie per aver sostenuto TooUI!</string>
++    <string name="donation_thanks">Grazie per aver sostenuto External Cover OS!</string>
+ 
+     <string name="menu_recent">Recenti</string>
+     <string name="menu_home">Casa</string>
+@@ -91,8 +91,8 @@
+ 
+     <string name="tiramisu_bluetooth">Bluetooth limitato (Android 13)</string>
+ 
+-    <string name="incompatibility_warning">SamSprung non è compatibile con le applicazioni che bloccano l\'intero schermo.\nPer continuare, rimuovere o disattivare questa applicazione.</string>
+-    <string name="cover_switch_warning">L\'interruttore principale deve essere abilitato per apparire sulla copertina.\nPremere nuovamente il tasto indietro per uscire da SamSprung TooUI.</string>
++    <string name="incompatibility_warning">External Cover OS non è compatibile con le applicazioni che bloccano l\'intero schermo.\nPer continuare, rimuovere o disattivare questa applicazione.</string>
++    <string name="cover_switch_warning">L\'interruttore principale deve essere abilitato per apparire sulla copertina.\nPremere nuovamente il tasto indietro per uscire da External Cover OS.</string>
+ 
+     <string name="display_unavailable">Richiede più di un display!</string>
+ 
+@@ -100,7 +100,7 @@
+     <string name="incompatible_fragment">Il pannello non può essere cancellato</string>
+ 
+     <string name="accessibility_directions">Fare clic su Conferma per aprire Accessibilità.</string>
+-    <string name="accessibility_service">Navigazione SamSprung</string>
++    <string name="accessibility_service">Navigazione External Cover OS</string>
+     <string name="accessibility_details">Abilita l\'azione di navigazione virtuale e il supporto hardware.</string>
+ 
+     <string name="btn_close_tip">Chiudere il Launcher</string>
+diff --git a/app/src/main/res/values-ko/strings.xml b/app/src/main/res/values-ko/strings.xml
+index 7008d35..4f41283 100755
+--- a/app/src/main/res/values-ko/strings.xml
++++ b/app/src/main/res/values-ko/strings.xml
+@@ -87,8 +87,8 @@
+     <string name="main_screen_required">계속하려면 장치 열기</string>
+     <string name="incompatible_fragment">패널을 삭제할 수 없습니다</string>
+ 
+-    <string name="accessibility_directions">접근성을 통해 하드웨어 뒤로 버튼을 시뮬레이션 할 수 있습니다.\n\nClick confirm to open Accessibility\n\nInstalled apps -> SamSprung Navigation\n&#160;&#160;&#160;&#160;-> Toggle switch on -> Allow to enable.</string>
+-    <string name="accessibility_service">SamSprung 내비게이션</string>
++    <string name="accessibility_directions">접근성을 통해 하드웨어 뒤로 버튼을 시뮬레이션 할 수 있습니다.\n\nClick confirm to open Accessibility\n\nInstalled apps -> External Cover OS Navigation\n&#160;&#160;&#160;&#160;-> Toggle switch on -> Allow to enable.</string>
++    <string name="accessibility_service">External Cover OS 내비게이션</string>
+     <string name="accessibility_details">가상 탐색 작업 및 하드웨어 지원을 활성화합니다.</string>
+ 
+     <string name="fingerprint_required">휴대 전화 잠금 해제\n지문 잠금 해제 사용</string>
+diff --git a/app/src/main/res/values-pl/strings.xml b/app/src/main/res/values-pl/strings.xml
+index 30cc3b6..d054070 100644
+--- a/app/src/main/res/values-pl/strings.xml
++++ b/app/src/main/res/values-pl/strings.xml
+@@ -74,7 +74,7 @@
+ 
+     <string name="sub_button">%1$s Miesięczna darowizna</string>
+     <string name="iap_button">%1$s Jednorazowa darowizna</string>
+-    <string name="donation_thanks">Dziękujemy za wsparcie TooUI!</string>
++    <string name="donation_thanks">Dziękujemy za wsparcie External Cover OS!</string>
+ 
+     <string name="menu_recent">Ostatnie</string>
+     <string name="menu_home">Strona główna</string>
+@@ -91,16 +91,16 @@
+ 
+     <string name="tiramisu_bluetooth">Bluetooth ograniczony (Android 13)</string>
+ 
+-    <string name="incompatibility_warning">SamSprung nie jest kompatybilny z aplikacjami, które blokują cały ekran.\nProsimy usunąć lub wyłączyć tę aplikację, aby kontynuować.</string>
+-    <string name="cover_switch_warning">Główny przełącznik musi być włączony, aby pojawić się na okładce.\nNaciśnij ponownie przycisk Wstecz, aby wyjść z SamSprung TooUI.</string>
++    <string name="incompatibility_warning">External Cover OS nie jest kompatybilny z aplikacjami, które blokują cały ekran.\nProsimy usunąć lub wyłączyć tę aplikację, aby kontynuować.</string>
++    <string name="cover_switch_warning">Główny przełącznik musi być włączony, aby pojawić się na okładce.\nNaciśnij ponownie przycisk Wstecz, aby wyjść z External Cover OS.</string>
+ 
+     <string name="display_unavailable">Wymaga więcej niż jednego wyświetlacza!</string>
+ 
+     <string name="main_screen_required">Otwórz urządzenie, aby kontynuować</string>
+     <string name="incompatible_fragment">Panel nie może zostać usunięty</string>
+ 
+-    <string name="accessibility_directions">Kliknij potwierdź, aby otworzyć Dostępność\n\nZainstalowane aplikacje -&gt; SamSprung Navigation\n -&gt; Włącz przełącznik -&gt; Zezwól, aby włączyć.</string>
+-    <string name="accessibility_service">SamSprung Navigation</string>
++    <string name="accessibility_directions">Kliknij potwierdź, aby otworzyć Dostępność\n\nZainstalowane aplikacje -&gt; External Cover OS Navigation\n -&gt; Włącz przełącznik -&gt; Zezwól, aby włączyć.</string>
++    <string name="accessibility_service">External Cover OS Navigation</string>
+     <string name="accessibility_details">Włącz wirtualną nawigację i wsparcie sprzętowe.</string>
+ 
+     <string name="btn_close_tip">Zamknij Launcher</string>
+diff --git a/app/src/main/res/values/donottranslate.xml b/app/src/main/res/values/donottranslate.xml
+index 6066b44..bdc9336 100755
+--- a/app/src/main/res/values/donottranslate.xml
++++ b/app/src/main/res/values/donottranslate.xml
+@@ -1,7 +1,7 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+-    <string name="app_name" translatable="false">SamSprung TooUI</string>
++    <string name="app_name" translatable="false">External Cover OS</string>
+ 
+     <string name="build_hash" translatable="false">#%1$s</string>
+-    <string name="git_issue_title" translatable="false">[Logcat]: SamSprung #%1$s</string>
++    <string name="git_issue_title" translatable="false">[Logcat]: External Cover OS #%1$s</string>
+ </resources>
+\ No newline at end of file
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index ff5e3dc..cba532f2b 100755
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -74,7 +74,7 @@
+ 
+     <string name="sub_button">%1$s Monthly Donation</string>
+     <string name="iap_button">%1$s One-Time Donation</string>
+-    <string name="donation_thanks">Thanks for supporting TooUI!</string>
++    <string name="donation_thanks">Thanks for supporting External Cover OS!</string>
+ 
+     <string name="menu_recent">Recent</string>
+     <string name="menu_home">Home</string>
+@@ -91,16 +91,16 @@
+ 
+     <string name="tiramisu_bluetooth">Bluetooth restricted (Android 13)</string>
+ 
+-    <string name="incompatibility_warning">SamSprung is not compatible with apps that block the entire screen.\nPlease remove or disable this app to continue.</string>
+-    <string name="cover_switch_warning">Main switch must be enabled to appear on cover.\nPress back button again to exit SamSprung TooUI.</string>
++    <string name="incompatibility_warning">External Cover OS is not compatible with apps that block the entire screen.\nPlease remove or disable this app to continue.</string>
++    <string name="cover_switch_warning">Main switch must be enabled to appear on cover.\nPress back button again to exit External Cover OS.</string>
+ 
+     <string name="display_unavailable">Requires more than one display!</string>
+ 
+     <string name="main_screen_required">Open device to continue</string>
+     <string name="incompatible_fragment">Panel cannot be deleted</string>
+ 
+-    <string name="accessibility_directions">Click confirm to open Accessibility\n\nInstalled apps -> SamSprung Navigation\n&#160;&#160;&#160;&#160;-> Toggle switch on -> Allow to enable.</string>
+-    <string name="accessibility_service">SamSprung Navigation</string>
++    <string name="accessibility_directions">Click confirm to open Accessibility\n\nInstalled apps -> External Cover OS Navigation\n&#160;&#160;&#160;&#160;-> Toggle switch on -> Allow to enable.</string>
++    <string name="accessibility_service">External Cover OS Navigation</string>
+     <string name="accessibility_details">Enable virtual navigation action and hardware support.</string>
+ 
+     <string name="btn_close_tip">Close Launcher</string>
+@@ -143,4 +143,10 @@
+     <string name="widget_manager_menu">Widgets</string>
+     <string name="widget_shortcut_short">Widgets</string>
+     <string name="widget_shortcut_long">Manage cover widgets</string>
++
++    <!-- Voice dictation -->
++    <string name="voice_dictation">Voice dictation</string>
++    <string name="voice_permission_needed">Allow microphone access in the settings to use voice dictation</string>
++    <string name="voice_unavailable">Voice recognition is not available on this device</string>
++    <string name="voice_network_error">Voice dictation needs an internet connection</string>
+ </resources>
+\ No newline at end of file

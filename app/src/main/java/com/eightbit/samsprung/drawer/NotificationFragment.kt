@@ -53,6 +53,7 @@ import com.eightbit.samsprung.R
 import com.eightbit.samsprung.SamSprung
 import com.eightbit.samsprung.SamSprungOverlay
 import com.eightbit.samsprung.settings.Preferences
+import com.eightbit.samsprung.speech.DictationHelper
 import com.eightbit.view.OnSwipeTouchListener
 import com.eightbit.widget.RecyclerViewTouch
 import java.util.*
@@ -148,7 +149,35 @@ class NotificationFragment : Fragment(), NotificationAdapter.OnNoticeClickListen
                 val dialog = AlertDialog.Builder(
                     ContextThemeWrapper(requireActivity(), R.style.Theme_SecondScreen_NoActionBar)
                 )
+                var dictation: DictationHelper? = null
                 view.findViewById<LinearLayout>(R.id.entries).run {
+                    val replyField = findViewById<EditText>(R.id.reply)
+                    val micButton = findViewById<AppCompatImageView>(R.id.reply_voice)
+                    dictation = DictationHelper(requireContext(), object : DictationHelper.Listener {
+                        // What was already written before dictating, so it is not lost
+                        private var written = ""
+
+                        override fun onListening(active: Boolean) {
+                            if (active) written = replyField.text.toString().trimEnd()
+                            micButton.setImageResource(
+                                if (active) R.drawable.ic_mic_active_24dp else R.drawable.ic_mic_24dp
+                            )
+                        }
+
+                        override fun onText(text: String, isFinal: Boolean) {
+                            val prefix = if (written.isEmpty()) "" else "$written "
+                            replyField.setText(prefix + text)
+                            replyField.setSelection(replyField.text.length)
+                        }
+
+                        override fun onError(code: Int) {
+                            DictationHelper.messageFor(code)?.let {
+                                Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    })
+                    micButton.isVisible = dictation?.isAvailable == true
+                    micButton.setOnClickListener { dictation?.toggle() }
                     findViewById<AppCompatImageView>(R.id.send).setOnClickListener {
                         val reply = findViewById<EditText>(R.id.reply)
                         val replyIntent = Intent()
@@ -164,6 +193,7 @@ class NotificationFragment : Fragment(), NotificationAdapter.OnNoticeClickListen
                         replyDialog?.dismiss()
                     }
                 }
+                dialog.setOnDismissListener { dictation?.destroy() }
                 replyDialog = dialog.setView(view).show()
                 replyDialog.window?.setLayout(
                     LinearLayout.LayoutParams.MATCH_PARENT,

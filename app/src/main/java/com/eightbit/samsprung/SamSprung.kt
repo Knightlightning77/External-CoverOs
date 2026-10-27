@@ -26,6 +26,9 @@ import kotlin.system.exitProcess
 
 const val organization = "SamSprung"
 
+/** Name shown to the user wherever the app is named. */
+const val appName = "External Cover OS"
+
 class SamSprung : Application() {
 
     fun setThemePreference() {

@@ -74,7 +74,7 @@
 
     <string name="sub_button">%1$s Donation mensuelle</string>
     <string name="iap_button">%1$s Donation unique</string>
-    <string name="donation_thanks">Merci de soutenir TooUI !</string>
+    <string name="donation_thanks">Merci de soutenir External Cover OS !</string>
 
     <string name="menu_recent">Récent</string>
     <string name="menu_home">Accueil</string>
@@ -91,16 +91,16 @@
 
     <string name="tiramisu_bluetooth">Bluetooth restreint (Android 13)</string>
 
-    <string name="incompatibility_warning">SamSprung n\'est pas compatible avec les applications qui bloquent tout l\'écran.\NVeuillez supprimer ou désactiver cette application pour continuer.</string>
-    <string name="cover_switch_warning">L\'interrupteur principal doit être activé pour apparaître sur le couvercle.\NAppuyez à nouveau sur le bouton retour pour quitter SamSprung TooUI.</string>
+    <string name="incompatibility_warning">External Cover OS n\'est pas compatible avec les applications qui bloquent tout l\'écran.\NVeuillez supprimer ou désactiver cette application pour continuer.</string>
+    <string name="cover_switch_warning">L\'interrupteur principal doit être activé pour apparaître sur le couvercle.\NAppuyez à nouveau sur le bouton retour pour quitter External Cover OS.</string>
 
     <string name="display_unavailable">Requiert plus d\'un écran !</string>
 
     <string name="main_screen_required">Ouvrez l\'appareil pour continuer</string>
     <string name="incompatible_fragment">Le panneau ne peut pas être supprimé</string>
 
-    <string name="accessibility_directions">Cliquez sur confirmer pour ouvrir Accessibilité -&gt; Applications installées -&gt; SamSprung Navigation -&gt; Basculer l\'interrupteur sur -&gt; Autoriser pour activer.</string>
-    <string name="accessibility_service">SamSprung Navigation</string>
+    <string name="accessibility_directions">Cliquez sur confirmer pour ouvrir Accessibilité -&gt; Applications installées -&gt; External Cover OS Navigation -&gt; Basculer l\'interrupteur sur -&gt; Autoriser pour activer.</string>
+    <string name="accessibility_service">External Cover OS Navigation</string>
     <string name="accessibility_details">Activer l\'action de navigation virtuelle et le support matériel.</string>
 
     <string name="btn_close_tip">Fermer le lanceur</string>

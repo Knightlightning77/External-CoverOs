@@ -285,7 +285,7 @@ class AppDisplayListener : Service() {
         var group = mNotificationManager.getNotificationChannelGroup("tooui_services")
         if (null == group) {
             mNotificationManager.createNotificationChannelGroup(
-                NotificationChannelGroup("tooui_services", "SamSprung Services")
+                NotificationChannelGroup("tooui_services", "$appName Services")
             )
             group = mNotificationManager.getNotificationChannelGroup("tooui_services")
         }
@@ -296,7 +296,7 @@ class AppDisplayListener : Service() {
         mNotificationManager.createNotificationChannel(notificationChannel)
         val builder = NotificationCompat.Builder(this, "display_channel")
 
-        val notificationText = getString(R.string.display_service, organization)
+        val notificationText = getString(R.string.display_service, appName)
         builder.setContentTitle(notificationText).setTicker(notificationText)
             .setSmallIcon(R.drawable.ic_samsprung_24dp)
             .setPriority(NotificationCompat.PRIORITY_LOW)

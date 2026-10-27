@@ -100,18 +100,18 @@ class OnBroadcastService : Service() {
         var group = mNotificationManager.getNotificationChannelGroup("tooui_services")
         if (null == group) {
             mNotificationManager.createNotificationChannelGroup(
-                NotificationChannelGroup("tooui_services", "SamSprung Services")
+                NotificationChannelGroup("tooui_services", "$appName Services")
             )
             group = mNotificationManager.getNotificationChannelGroup("tooui_services")
         }
         val notificationChannel = NotificationChannel("tooui_overlay_channel",
-            "TooUI Overlay Notification", NotificationManager.IMPORTANCE_LOW)
+            "$appName Overlay Notification", NotificationManager.IMPORTANCE_LOW)
         notificationChannel.enableLights(false)
         notificationChannel.lockscreenVisibility = Notification.VISIBILITY_SECRET
         mNotificationManager.createNotificationChannel(notificationChannel)
         val builder = NotificationCompat.Builder(this, "tooui_overlay_channel")
 
-        val notificationText = getString(R.string.overlay_service, organization)
+        val notificationText = getString(R.string.overlay_service, appName)
         builder.setContentTitle(notificationText).setTicker(notificationText)
             .setSmallIcon(R.drawable.ic_samsprung_24dp)
             .setPriority(NotificationCompat.PRIORITY_LOW)
