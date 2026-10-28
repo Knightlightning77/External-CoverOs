@@ -9,6 +9,7 @@ import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.hardware.display.DisplayManager
 import android.os.Bundle
+import android.provider.Settings
 import android.view.Display
 import android.view.Gravity
 import android.view.View
@@ -16,6 +17,7 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.ImageView
 import android.widget.Toast
+import com.eightbit.content.ScaledContext
 import com.eightbit.samsprung.R
 
 /**
@@ -112,9 +114,13 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
                 if (it.parent != null) windowManager?.removeView(it)
             } catch (_: Exception) { }
         }
-        // The accessibility service hands its window token to the contexts it creates for a
-        // display. Wrapping it in a window context would lose that token (BadTokenException).
-        val context = service.createDisplayContext(display)
+        // The accessibility overlay window gets no token on the cover display, so the button is a
+        // regular overlay window of this app, exactly like the cover navigation bar. It relies on
+        // the "draw over other apps" permission the app already needs.
+        if (!Settings.canDrawOverlays(service)) {
+            throw IllegalStateException("falta el permiso de mostrar sobre otras apps")
+        }
+        val context = ScaledContext(service.applicationContext).cover()
         val density = context.resources.displayMetrics.density
         val size = (44 * density).toInt()
 
@@ -130,7 +136,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
         }
         micParams = WindowManager.LayoutParams(
             size, size,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                     WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
