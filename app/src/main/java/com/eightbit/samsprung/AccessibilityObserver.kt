@@ -23,6 +23,7 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.eightbit.samsprung.settings.Preferences
+import com.eightbit.samsprung.speech.DictationLog
 import com.eightbit.samsprung.speech.SystemDictation
 import java.io.File
 
@@ -91,6 +92,7 @@ class AccessibilityObserver : AccessibilityService() {
         info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
         info.notificationTimeout = 100
         serviceInfo = info
+        DictationLog.add(this, "servicio configurado, dictado=${isDictationEnabled()}")
     }
 
     override fun onServiceConnected() {
@@ -101,9 +103,13 @@ class AccessibilityObserver : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         val mic = dictation ?: return
         if (event.packageName == packageName) return
+        DictationLog.add(this, "evento ${AccessibilityEvent.eventTypeToString(event.eventType)} " +
+                "app=${event.packageName}")
         when (event.eventType) {
             AccessibilityEvent.TYPE_VIEW_FOCUSED, AccessibilityEvent.TYPE_VIEW_CLICKED -> {
                 val node = event.source
+                DictationLog.add(this, "foco/clic: editable=${node?.isEditable} " +
+                        "contraseña=${node?.isPassword} pantalla=${node?.let { displayOf(it) }}")
                 if (node != null && isDictationField(node)) {
                     mic.show(node, displayOf(node))
                 } else if (event.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED) {

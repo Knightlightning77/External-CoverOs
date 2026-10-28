@@ -154,4 +154,5 @@
     <string name="options_dictation">Micrófono de dictado en todas las apps</string>
     <string name="dictation_enable_accessibility">Activa primero el servicio de accesibilidad para usar el micrófono de dictado</string>
     <string name="dictation_mic">Dictar</string>
+    <string name="dictation_log_clear">Borrar registro</string>
 </resources>

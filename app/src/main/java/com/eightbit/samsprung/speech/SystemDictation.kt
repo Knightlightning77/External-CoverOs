@@ -42,6 +42,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
         if (dictation.isListening && target?.let { it == field } == true) return
         // Only for the cover display: the main display has its own keyboard and dictation
         if (pickDisplay(displayId).displayId == Display.DEFAULT_DISPLAY) {
+            DictationLog.add(service, "campo en pantalla principal (pantalla=$displayId): no se muestra")
             hide()
             return
         }
@@ -49,10 +50,12 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
         val bounds = Rect()
         field.getBoundsInScreen(bounds)
         if (bounds.isEmpty) {
+            DictationLog.add(service, "campo sin tamaño, no se muestra")
             hide()
             return
         }
         try {
+            DictationLog.add(service, "mostrar mic: pantalla=$displayId campo=${bounds.flattenToString()}")
             val view = ensureView(displayId)
             val wm = windowManager ?: return
             val params = micParams ?: return
@@ -61,8 +64,10 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
             params.x = (bounds.right - size - margin()).coerceIn(0, (screen.width() - size).coerceAtLeast(0))
             params.y = (bounds.top - size / 2).coerceIn(0, (screen.height() - size).coerceAtLeast(0))
             if (view.parent == null) wm.addView(view, params) else wm.updateViewLayout(view, params)
-        } catch (_: Exception) {
+            DictationLog.add(service, "mic mostrado en pantalla $micDisplayId")
+        } catch (ex: Exception) {
             // The window could not be added (display gone, service shutting down...)
+            DictationLog.add(service, "ERROR al mostrar: ${ex.javaClass.simpleName}: ${ex.message}")
             micView = null
         }
     }

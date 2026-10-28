@@ -50,6 +50,7 @@ import android.widget.*
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
+import com.eightbit.samsprung.speech.DictationLog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatCheckBox
 import androidx.appcompat.widget.AppCompatImageView
@@ -683,6 +684,17 @@ class CoverPreferences : AppCompatActivity() {
         }
         findViewById<LinearLayout>(R.id.dictation_row).setOnClickListener {
             dictation.isChecked = !dictation.isChecked
+        }
+        findViewById<LinearLayout>(R.id.dictation_row).setOnLongClickListener {
+            AlertDialog.Builder(this)
+                .setTitle(R.string.options_dictation)
+                .setMessage(DictationLog.read(this))
+                .setPositiveButton(R.string.button_confirm) { dialog, _ -> dialog.dismiss() }
+                .setNegativeButton(R.string.dictation_log_clear) { dialog, _ ->
+                    DictationLog.clear(this)
+                    dialog.dismiss()
+                }.show()
+            true
         }
         if (BuildConfig.GOOGLE_PLAY) findViewById<LinearLayout>(R.id.dictation_row).isGone = true
 
