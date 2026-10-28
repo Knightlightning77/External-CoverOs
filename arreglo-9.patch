@@ -1,0 +1,15 @@
+diff --git a/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt b/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
+index 4f7031f..0efb20b 100644
+--- a/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
++++ b/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
+@@ -112,8 +112,9 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+                 if (it.parent != null) windowManager?.removeView(it)
+             } catch (_: Exception) { }
+         }
++        // The accessibility service hands its window token to the contexts it creates for a
++        // display. Wrapping it in a window context would lose that token (BadTokenException).
+         val context = service.createDisplayContext(display)
+-            .createWindowContext(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, null)
+         val density = context.resources.displayMetrics.density
+         val size = (44 * density).toInt()
+ 
