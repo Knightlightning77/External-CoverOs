@@ -1,0 +1,76 @@
+diff --git a/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt b/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
+index 3a3b5ba..6dc9747 100644
+--- a/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
++++ b/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
+@@ -9,6 +9,8 @@ import android.graphics.Rect
+ import android.graphics.drawable.GradientDrawable
+ import android.hardware.display.DisplayManager
+ import android.os.Bundle
++import android.os.Handler
++import android.os.Looper
+ import android.provider.Settings
+ import android.view.Display
+ import android.view.Gravity
+@@ -38,6 +40,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+ 
+     private var target: AccessibilityNodeInfo? = null
+     private var baseText: CharSequence = ""
++    private val handler = Handler(Looper.getMainLooper())
+ 
+     /** Shows (or moves) the microphone next to [field]. */
+     fun show(field: AccessibilityNodeInfo, displayId: Int = -1) {
+@@ -167,10 +170,36 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+         // Many apps (WhatsApp, Telegram...) report the placeholder ("Mensaje") as the text
+         val isPlaceholder = field.isShowingHintText ||
+                 (current.isNotEmpty() && (current == hint || current == description))
+-        baseText = if (isPlaceholder) "" else current
+-        DictationLog.add(service, "texto previo='$current' pista='$hint' descripcion='$description' " +
+-                "marcador=$isPlaceholder")
+-        dictation.start()
++        if (isPlaceholder || current.isEmpty()) {
++            baseText = ""
++            DictationLog.add(service, "texto previo='$current' marcador=true")
++            dictation.start()
++            return
++        }
++        // Some apps (WhatsApp, Telegram) report their placeholder ("Mensaje") as the text without
++        // marking it. Clear the field for a moment: if it still reports the same text it was only
++        // a placeholder, otherwise it was real text and it is put back.
++        setFieldText(field, "")
++        handler.postDelayed({
++            field.refresh()
++            val after = field.text?.toString() ?: ""
++            if (after.isNotEmpty() && after == current) {
++                baseText = ""
++            } else {
++                baseText = current
++                setFieldText(field, current)
++            }
++            DictationLog.add(service, "texto previo='$current' tras vaciar='$after' " +
++                    "marcador=${baseText.isEmpty()}")
++            dictation.start()
++        }, 250)
++    }
++
++    private fun setFieldText(field: AccessibilityNodeInfo, text: CharSequence) {
++        val args = Bundle().apply {
++            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
++        }
++        field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+     }
+ 
+     private fun writeText(text: String) {
+@@ -179,12 +208,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+         val joined = StringBuilder(baseText)
+         if (joined.isNotEmpty() && !joined.last().isWhitespace()) joined.append(' ')
+         joined.append(text)
+-        val args = Bundle().apply {
+-            putCharSequence(
+-                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, joined.toString()
+-            )
+-        }
+-        field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
++        setFieldText(field, joined.toString())
+     }
+ 
+     override fun onListening(active: Boolean) {
