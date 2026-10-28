@@ -161,7 +161,15 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
         }
         field.refresh()
         // A field showing its hint reports the hint as text
-        baseText = if (field.isShowingHintText) "" else (field.text ?: "")
+        val current = field.text?.toString() ?: ""
+        val hint = field.hintText?.toString()
+        val description = field.contentDescription?.toString()
+        // Many apps (WhatsApp, Telegram...) report the placeholder ("Mensaje") as the text
+        val isPlaceholder = field.isShowingHintText ||
+                (current.isNotEmpty() && (current == hint || current == description))
+        baseText = if (isPlaceholder) "" else current
+        DictationLog.add(service, "texto previo='$current' pista='$hint' descripcion='$description' " +
+                "marcador=$isPlaceholder")
         dictation.start()
     }
 
