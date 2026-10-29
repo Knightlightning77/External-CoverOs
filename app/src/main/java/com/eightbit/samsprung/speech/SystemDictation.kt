@@ -138,10 +138,10 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
         }
         val context = ScaledContext(service.applicationContext).cover()
         val density = context.resources.displayMetrics.density
-        val size = (44 * density).toInt()
+        val size = (66 * density).toInt()
 
-        val pad = (10 * density).toInt()
-        val gap = (8 * density).toInt()
+        val pad = (15 * density).toInt()
+        val gap = (12 * density).toInt()
 
         val mic = ImageView(context).apply {
             setImageResource(R.drawable.ic_mic_24dp)
