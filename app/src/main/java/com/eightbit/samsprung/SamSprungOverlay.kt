@@ -631,7 +631,7 @@ class SamSprungOverlay : AppCompatActivity() {
         val menuButton = findViewById<FloatingActionButton>(R.id.menu_fab)
         if (prefs.getBoolean(Preferences.prefTapper, false)) {
             menuButton.size = FloatingActionButton.SIZE_NORMAL
-            menuButton.setMaxImageSize(34.toPx)
+            menuButton.setMaxImageSize(48.toPx)
             (menuButton.layoutParams as? CoordinatorLayout.LayoutParams)?.run {
                 val margin = -(8.toPx)
                 marginStart = margin
@@ -789,7 +789,7 @@ class SamSprungOverlay : AppCompatActivity() {
         bottomHandle.setBackgroundColor(color)
         bottomHandle.alpha = prefs.getFloat(Preferences.prefAlphas, 1f)
         setMenuButtonGravity(menuButton)
-        menuButton.drawable.setTint(color)
+        menuButton.drawable.mutate().setTint(color)
         menuButton.alpha = prefs.getFloat(Preferences.prefAlphas, 1f)
     }
 

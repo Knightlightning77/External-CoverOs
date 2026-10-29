@@ -11,13 +11,16 @@ import android.hardware.display.DisplayManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.Display
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.Toast
 import com.eightbit.content.ScaledContext
 import com.eightbit.samsprung.R
@@ -34,6 +37,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
     private val dictation = DictationHelper(service, this)
 
     private var windowManager: WindowManager? = null
+    private var rootView: LinearLayout? = null
     private var micView: ImageView? = null
     private var micParams: WindowManager.LayoutParams? = null
     private var micDisplayId = -1
@@ -41,6 +45,12 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
     private var target: AccessibilityNodeInfo? = null
     private var baseText: CharSequence = ""
     private val handler = Handler(Looper.getMainLooper())
+
+    /** Text known to be really typed in the field (not an app placeholder) and when it was set. */
+    private var verifiedText: String? = null
+    private var verifiedAt = 0L
+    /** Placeholder texts ("Mensaje"...) that apps report as if they were the content. */
+    private val placeholders = HashSet<String>()
 
     /** Shows (or moves) the microphone next to [field]. */
     fun show(field: AccessibilityNodeInfo, displayId: Int = -1) {
@@ -64,9 +74,10 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
             val view = ensureView(displayId)
             val wm = windowManager ?: return
             val params = micParams ?: return
-            val size = params.width
+            val size = params.height
             val screen = wm.currentWindowMetrics.bounds
-            params.x = (bounds.right - size - margin()).coerceIn(0, (screen.width() - size).coerceAtLeast(0))
+            params.x = (bounds.right - params.width - margin())
+                .coerceIn(0, (screen.width() - params.width).coerceAtLeast(0))
             params.y = (bounds.top - size / 2).coerceIn(0, (screen.height() - size).coerceAtLeast(0))
             if (view.parent == null) wm.addView(view, params) else wm.updateViewLayout(view, params)
             DictationLog.add(service, "mic mostrado en pantalla $micDisplayId")
@@ -74,6 +85,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
             // The window could not be added (display gone, service shutting down...)
             DictationLog.add(service, "ERROR al mostrar: ${ex.javaClass.simpleName}: ${ex.message}")
             micView = null
+            rootView = null
         }
     }
 
@@ -81,7 +93,11 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
     fun hide() {
         if (dictation.isListening) dictation.stop()
         target = null
-        micView?.let {
+        removeWindow()
+    }
+
+    private fun removeWindow() {
+        rootView?.let {
             try {
                 if (it.parent != null) windowManager?.removeView(it)
             } catch (_: Exception) { }
@@ -92,6 +108,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
         hide()
         dictation.destroy()
         micView = null
+        rootView = null
         windowManager = null
     }
 
@@ -107,16 +124,12 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
         return if (cover != null && main?.state != Display.STATE_ON) cover else main
     }
 
-    private fun ensureView(preferred: Int): ImageView {
+    private fun ensureView(preferred: Int): LinearLayout {
         val display = pickDisplay(preferred)
-        if (micView != null && micDisplayId == display.displayId) return micView!!
+        rootView?.let { if (micDisplayId == display.displayId) return it }
 
         // Display changed (fold / unfold) or first use
-        micView?.let {
-            try {
-                if (it.parent != null) windowManager?.removeView(it)
-            } catch (_: Exception) { }
-        }
+        removeWindow()
         // The accessibility overlay window gets no token on the cover display, so the button is a
         // regular overlay window of this app, exactly like the cover navigation bar. It relies on
         // the "draw over other apps" permission the app already needs.
@@ -127,18 +140,49 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
         val density = context.resources.displayMetrics.density
         val size = (44 * density).toInt()
 
-        val view = ImageView(context).apply {
+        val pad = (10 * density).toInt()
+        val gap = (8 * density).toInt()
+
+        val mic = ImageView(context).apply {
             setImageResource(R.drawable.ic_mic_24dp)
             imageTintList = ColorStateList.valueOf(Color.WHITE)
-            val pad = (10 * density).toInt()
             setPadding(pad, pad, pad, pad)
             background = circle(IDLE_COLOR)
             elevation = 6 * density
             contentDescription = service.getString(R.string.dictation_mic)
             setOnClickListener { onMicClicked() }
         }
+        val erase = ImageView(context).apply {
+            setImageResource(R.drawable.ic_backspace_24dp)
+            imageTintList = ColorStateList.valueOf(Color.WHITE)
+            setPadding(pad, pad, pad, pad)
+            background = circle(ERASE_COLOR)
+            elevation = 6 * density
+            contentDescription = service.getString(R.string.dictation_erase)
+            // Tap deletes one character, holding the button keeps deleting
+            setOnTouchListener { v, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        v.isPressed = true
+                        deleteLast()
+                        handler.removeCallbacks(repeatDelete)
+                        handler.postDelayed(repeatDelete, 450)
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        v.isPressed = false
+                        handler.removeCallbacks(repeatDelete)
+                    }
+                }
+                true
+            }
+        }
+        val view = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(erase, LinearLayout.LayoutParams(size, size).apply { marginEnd = gap })
+            addView(mic, LinearLayout.LayoutParams(size, size))
+        }
         micParams = WindowManager.LayoutParams(
-            size, size,
+            size * 2 + gap, size,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
@@ -146,7 +190,8 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.TOP or Gravity.START }
         windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        micView = view
+        micView = mic
+        rootView = view
         micDisplayId = display.displayId
         return view
     }
@@ -165,6 +210,16 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
         field.refresh()
         // A field showing its hint reports the hint as text
         val current = field.text?.toString() ?: ""
+        if (current.isNotEmpty() && current == verifiedText) {
+            baseText = current
+            dictation.start()
+            return
+        }
+        if (current in placeholders) {
+            baseText = ""
+            dictation.start()
+            return
+        }
         val hint = field.hintText?.toString()
         val description = field.contentDescription?.toString()
         // Many apps (WhatsApp, Telegram...) report the placeholder ("Mensaje") as the text
@@ -185,9 +240,11 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
             val after = field.text?.toString() ?: ""
             if (after.isNotEmpty() && after == current) {
                 baseText = ""
+                placeholders.add(current)
             } else {
                 baseText = current
                 setFieldText(field, current)
+                markVerified(current)
             }
             DictationLog.add(service, "texto previo='$current' tras vaciar='$after' " +
                     "marcador=${baseText.isEmpty()}")
@@ -209,6 +266,66 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
         if (joined.isNotEmpty() && !joined.last().isWhitespace()) joined.append(' ')
         joined.append(text)
         setFieldText(field, joined.toString())
+        markVerified(joined.toString())
+    }
+
+    private fun markVerified(text: String) {
+        verifiedText = text
+        verifiedAt = SystemClock.uptimeMillis()
+    }
+
+    private val repeatDelete = object : Runnable {
+        override fun run() {
+            deleteLast()
+            handler.postDelayed(this, 120)
+        }
+    }
+
+    /** Deletes the last character of the field, ignoring app placeholders. */
+    private fun deleteLast() {
+        val field = target ?: return
+        // A dictation in progress would write its text again right after the deletion
+        if (dictation.isListening) dictation.destroy()
+
+        val recent = verifiedText != null && SystemClock.uptimeMillis() - verifiedAt < 1500
+        val current: String
+        if (recent) {
+            // The field may not have shown our last change yet, so trust what we wrote
+            current = verifiedText ?: return
+        } else {
+            field.refresh()
+            current = field.text?.toString() ?: ""
+        }
+        if (current.isEmpty() || field.isShowingHintText || current in placeholders) return
+        if (recent || current == verifiedText) {
+            eraseOne(field, current)
+            return
+        }
+        // Not sure whether this is real text or a placeholder: clear and look again
+        setFieldText(field, "")
+        handler.postDelayed({
+            field.refresh()
+            val after = field.text?.toString() ?: ""
+            if (after.isNotEmpty() && after == current) {
+                placeholders.add(current)
+            } else {
+                eraseOne(field, current)
+            }
+        }, 250)
+    }
+
+    private fun eraseOne(field: AccessibilityNodeInfo, current: String) {
+        val next = if (current.isEmpty()) "" else
+            current.substring(0, current.offsetByCodePoints(current.length, -1))
+        setFieldText(field, next)
+        markVerified(next)
+        if (next.isEmpty()) {
+            // The app now shows its placeholder: learn it so it is never taken for real text
+            handler.postDelayed({
+                field.refresh()
+                field.text?.toString()?.takeIf { it.isNotEmpty() }?.let { placeholders.add(it) }
+            }, 250)
+        }
     }
 
     override fun onListening(active: Boolean) {
@@ -228,5 +345,6 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
     companion object {
         private val IDLE_COLOR = Color.parseColor("#6A3DF0")
         private val ACTIVE_COLOR = Color.parseColor("#E53935")
+        private val ERASE_COLOR = Color.parseColor("#546E7A")
     }
 }

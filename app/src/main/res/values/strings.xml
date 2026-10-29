@@ -155,4 +155,5 @@
     <string name="dictation_enable_accessibility">Enable the accessibility service first to use the dictation microphone</string>
     <string name="dictation_mic">Dictate</string>
     <string name="dictation_log_clear">Clear log</string>
+    <string name="dictation_erase">Delete last character</string>
 </resources>
