@@ -1,0 +1,29 @@
+diff --git a/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt b/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt
+index efa7142..c2cffde 100755
+--- a/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt
++++ b/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt
+@@ -633,7 +633,7 @@ class SamSprungOverlay : AppCompatActivity() {
+             menuButton.size = FloatingActionButton.SIZE_NORMAL
+             menuButton.setMaxImageSize(48.toPx)
+             (menuButton.layoutParams as? CoordinatorLayout.LayoutParams)?.run {
+-                val margin = -(8.toPx)
++                val margin = 2.toPx
+                 marginStart = margin
+                 marginEnd = margin
+             }
+diff --git a/app/src/main/res/layout/home_main_view.xml b/app/src/main/res/layout/home_main_view.xml
+index bc073cf..e7220ae 100755
+--- a/app/src/main/res/layout/home_main_view.xml
++++ b/app/src/main/res/layout/home_main_view.xml
+@@ -244,8 +244,8 @@
+         app:layout_anchor="@+id/bottom_handle"
+         app:layout_anchorGravity="top|end"
+         app:layout_dodgeInsetEdges="bottom"
+-        android:layout_marginStart="-6dp"
+-        android:layout_marginEnd="-6dp"
++        android:layout_marginStart="2dp"
++        android:layout_marginEnd="2dp"
+         android:contentDescription="@string/description_badge"
+         app:useCompatPadding="false" />
+ </androidx.coordinatorlayout.widget.CoordinatorLayout>
+\ No newline at end of file
