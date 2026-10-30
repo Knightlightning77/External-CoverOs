@@ -633,7 +633,7 @@ class SamSprungOverlay : AppCompatActivity() {
             menuButton.size = FloatingActionButton.SIZE_NORMAL
             menuButton.setMaxImageSize(48.toPx)
             (menuButton.layoutParams as? CoordinatorLayout.LayoutParams)?.run {
-                val margin = 2.toPx
+                val margin = 5.toPx
                 marginStart = margin
                 marginEnd = margin
             }
