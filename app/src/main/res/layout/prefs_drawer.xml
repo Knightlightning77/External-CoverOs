@@ -234,6 +234,47 @@
             android:max="60"/>
     </LinearLayout>
 
+    <LinearLayout
+        android:id="@+id/icon_pack_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="8dp"
+        android:gravity="center_vertical"
+        android:layout_gravity="center_vertical">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:textSize="24sp"
+            android:textColor="?android:textColorPrimary"
+            android:gravity="center_vertical"
+            android:layout_height="wrap_content"
+            android:text="@string/options_icon_pack" />
+
+        <TextView
+            android:id="@+id/icon_pack_text"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:textSize="20sp"
+            android:textColor="?android:textColorSecondary"
+            android:gravity="end|center_vertical"
+            android:layout_height="wrap_content" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/icon_assign_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="8dp"
+        android:minHeight="48dp"
+        android:textSize="20sp"
+        android:textColor="?android:textColorPrimary"
+        android:gravity="center_vertical"
+        android:text="@string/icon_assign_title" />
+
     <androidx.appcompat.widget.AppCompatToggleButton
         android:id="@+id/swapViewType"
         android:layout_width="match_parent"

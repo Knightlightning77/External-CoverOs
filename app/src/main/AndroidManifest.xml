@@ -54,6 +54,18 @@
         <intent>
             <action android:name="android.intent.action.MAIN" />
         </intent>
+        <intent>
+            <action android:name="org.adw.launcher.THEMES" />
+        </intent>
+        <intent>
+            <action android:name="com.novalauncher.THEME" />
+        </intent>
+        <intent>
+            <action android:name="com.anddoes.launcher.THEME" />
+        </intent>
+        <intent>
+            <action android:name="org.adw.launcher.icons.ACTION_PICK_ICON" />
+        </intent>
     </queries>
 
     <application
@@ -84,6 +96,11 @@
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
         </activity>
+        <activity
+            android:name=".settings.IconAssignActivity"
+            android:label="@string/icon_assign_title"
+            android:parentActivityName=".settings.CoverPreferences"
+            android:exported="false" />
         <activity
             android:name=".settings.WidgetManagerActivity"
             android:label="@string/widget_manager_title"

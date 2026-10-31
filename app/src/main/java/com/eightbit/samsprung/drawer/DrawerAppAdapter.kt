@@ -140,7 +140,11 @@ class DrawerAppAdapter(
         fun bind(resolveInfo: ResolveInfo) {
             this.resolveInfo = resolveInfo
             CoroutineScope(Dispatchers.IO).launch {
-                val icon = resolveInfo.loadIcon(packageManager)
+                val pack = prefs.getString(Preferences.prefIconPack, "") ?: ""
+                val packIcon = if (pack.isEmpty()) null else try {
+                    IconPacks.themedIcon(packageManager, prefs, pack, resolveInfo)
+                } catch (_: Exception) { null }
+                val icon = packIcon ?: resolveInfo.loadIcon(packageManager)
                 withContext(Dispatchers.Main) {
                     icon?.let { iconView.setImageDrawable(it) }
                 }

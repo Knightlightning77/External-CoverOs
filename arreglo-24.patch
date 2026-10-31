@@ -1,0 +1,853 @@
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 91943eb..d62a303 100755
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -54,6 +54,18 @@
+         <intent>
+             <action android:name="android.intent.action.MAIN" />
+         </intent>
++        <intent>
++            <action android:name="org.adw.launcher.THEMES" />
++        </intent>
++        <intent>
++            <action android:name="com.novalauncher.THEME" />
++        </intent>
++        <intent>
++            <action android:name="com.anddoes.launcher.THEME" />
++        </intent>
++        <intent>
++            <action android:name="org.adw.launcher.icons.ACTION_PICK_ICON" />
++        </intent>
+     </queries>
+ 
+     <application
+@@ -84,6 +96,11 @@
+                 android:name="android.app.shortcuts"
+                 android:resource="@xml/shortcuts" />
+         </activity>
++        <activity
++            android:name=".settings.IconAssignActivity"
++            android:label="@string/icon_assign_title"
++            android:parentActivityName=".settings.CoverPreferences"
++            android:exported="false" />
+         <activity
+             android:name=".settings.WidgetManagerActivity"
+             android:label="@string/widget_manager_title"
+diff --git a/app/src/main/java/com/eightbit/samsprung/drawer/DrawerAppAdapter.kt b/app/src/main/java/com/eightbit/samsprung/drawer/DrawerAppAdapter.kt
+index faa9453..a71a9cf 100755
+--- a/app/src/main/java/com/eightbit/samsprung/drawer/DrawerAppAdapter.kt
++++ b/app/src/main/java/com/eightbit/samsprung/drawer/DrawerAppAdapter.kt
+@@ -140,7 +140,11 @@ class DrawerAppAdapter(
+         fun bind(resolveInfo: ResolveInfo) {
+             this.resolveInfo = resolveInfo
+             CoroutineScope(Dispatchers.IO).launch {
+-                val icon = resolveInfo.loadIcon(packageManager)
++                val pack = prefs.getString(Preferences.prefIconPack, "") ?: ""
++                val packIcon = if (pack.isEmpty()) null else try {
++                    IconPacks.themedIcon(packageManager, prefs, pack, resolveInfo)
++                } catch (_: Exception) { null }
++                val icon = packIcon ?: resolveInfo.loadIcon(packageManager)
+                 withContext(Dispatchers.Main) {
+                     icon?.let { iconView.setImageDrawable(it) }
+                 }
+diff --git a/app/src/main/java/com/eightbit/samsprung/drawer/IconPacks.kt b/app/src/main/java/com/eightbit/samsprung/drawer/IconPacks.kt
+new file mode 100644
+index 0000000..6b8b4c5
+--- /dev/null
++++ b/app/src/main/java/com/eightbit/samsprung/drawer/IconPacks.kt
+@@ -0,0 +1,199 @@
++package com.eightbit.samsprung.drawer
++
++import android.content.Intent
++import android.content.SharedPreferences
++import android.content.pm.PackageManager
++import android.content.pm.ResolveInfo
++import android.content.res.Resources
++import android.graphics.Color
++import android.graphics.drawable.Drawable
++import android.graphics.drawable.GradientDrawable
++import android.graphics.drawable.InsetDrawable
++import android.graphics.drawable.LayerDrawable
++import android.util.Xml
++import androidx.core.content.res.ResourcesCompat
++import org.json.JSONObject
++import org.xmlpull.v1.XmlPullParser
++
++/**
++ * Support for the common Android icon packs (Arcticons, Lawnicons...). A pack declares itself
++ * with one of the launcher theme actions and maps app components to its drawables in an
++ * "appfilter" file, either an xml resource or an asset.
++ */
++object IconPacks {
++
++    class Pack(val packageName: String, val label: String)
++
++    private val ACTIONS = arrayOf(
++        "org.adw.launcher.THEMES",
++        "com.novalauncher.THEME",
++        "com.anddoes.launcher.THEME",
++        "org.adw.launcher.icons.ACTION_PICK_ICON",
++        "com.dlto.atom.launcher.THEME",
++        "ch.deletescape.lawnchair.ICONPACK"
++    )
++
++    /** Icon packs installed on the phone, sorted by name. */
++    fun installed(pm: PackageManager): List<Pack> {
++        val found = LinkedHashMap<String, Pack>()
++        for (action in ACTIONS) {
++            val matches = try {
++                pm.queryIntentActivities(Intent(action), PackageManager.GET_META_DATA)
++            } catch (_: Exception) { emptyList() }
++            for (match in matches) {
++                val info = match.activityInfo ?: continue
++                if (found.containsKey(info.packageName)) continue
++                val label = try {
++                    info.applicationInfo.loadLabel(pm).toString()
++                } catch (_: Exception) { info.packageName }
++                found[info.packageName] = Pack(info.packageName, label)
++            }
++        }
++        return found.values.sortedBy { it.label.lowercase() }
++    }
++
++    /** Grey of the circle drawn behind the icons of a pack, close to the one of the home screen. */
++    private val CIRCLE_COLOR = Color.parseColor("#293237")
++    private const val OVERRIDES = "prefIconOverrides"
++
++    private fun overrideKey(pack: String, info: ResolveInfo): String {
++        val activity = info.activityInfo
++        return "$pack|${activity.packageName}/${activity.name}"
++    }
++
++    private fun overrides(prefs: SharedPreferences): JSONObject = try {
++        JSONObject(prefs.getString(OVERRIDES, "{}") ?: "{}")
++    } catch (_: Exception) { JSONObject() }
++
++    /** Name of the pack icon the user assigned to [info], or null. */
++    fun assignedName(prefs: SharedPreferences, pack: String, info: ResolveInfo): String? {
++        return overrides(prefs).optString(overrideKey(pack, info), "").takeIf { it.isNotEmpty() }
++    }
++
++    /** Assigns the pack icon [drawableName] to [info]; null removes the assignment. */
++    fun assign(prefs: SharedPreferences, pack: String, info: ResolveInfo, drawableName: String?) {
++        val all = overrides(prefs)
++        if (drawableName == null) all.remove(overrideKey(pack, info))
++        else all.put(overrideKey(pack, info), drawableName)
++        prefs.edit().putString(OVERRIDES, all.toString()).apply()
++    }
++
++    /** Puts the icon over a round grey background, like the icons of the home screen. */
++    fun circled(icon: Drawable): Drawable {
++        val circle = GradientDrawable().apply {
++            shape = GradientDrawable.OVAL
++            setColor(CIRCLE_COLOR)
++        }
++        return LayerDrawable(arrayOf(circle, InsetDrawable(icon, 0.18f)))
++    }
++
++    /** True when the pack itself (not a user assignment) has an icon for [info]. */
++    @Synchronized
++    fun hasPackIcon(pm: PackageManager, packPackage: String, info: ResolveInfo): Boolean {
++        ensureLoaded(pm, packPackage)
++        val activity = info.activityInfo ?: return false
++        val name = mapping["${activity.packageName}/${activity.name}"] ?: return false
++        return resources?.let { res ->
++            res.getIdentifier(name, "drawable", packPackage) != 0 ||
++                    res.getIdentifier(name, "mipmap", packPackage) != 0
++        } ?: false
++    }
++
++    /** Every icon name of the pack, sorted. */
++    @Synchronized
++    fun drawableNames(pm: PackageManager, packPackage: String): List<String> {
++        ensureLoaded(pm, packPackage)
++        return mapping.values.toSet().sorted()
++    }
++
++    @Synchronized
++    fun iconByName(pm: PackageManager, packPackage: String, name: String): Drawable? {
++        ensureLoaded(pm, packPackage)
++        val res = resources ?: return null
++        var id = res.getIdentifier(name, "drawable", packPackage)
++        if (id == 0) id = res.getIdentifier(name, "mipmap", packPackage)
++        if (id == 0) return null
++        return try {
++            ResourcesCompat.getDrawable(res, id, null)
++        } catch (_: Exception) { null }
++    }
++
++    /**
++     * The icon to show in the drawer for [info]: the one the user assigned, or the one of the
++     * pack, over a grey circle. Null when neither exists (use the normal icon of the app).
++     */
++    fun themedIcon(
++        pm: PackageManager, prefs: SharedPreferences, packPackage: String, info: ResolveInfo
++    ): Drawable? {
++        val assigned = assignedName(prefs, packPackage, info)
++        val icon = (if (assigned != null) iconByName(pm, packPackage, assigned) else null)
++            ?: iconFor(pm, packPackage, info)
++        return icon?.let { circled(it) }
++    }
++
++    private var loadedPackage: String? = null
++    private var resources: Resources? = null
++    private var mapping: Map<String, String> = emptyMap()
++
++    /**
++     * The icon of [info] in the pack [packPackage], or null if the pack has none for it (the
++     * caller should then use the normal icon of the app). May take a while the first time.
++     */
++    @Synchronized
++    fun iconFor(pm: PackageManager, packPackage: String, info: ResolveInfo): Drawable? {
++        ensureLoaded(pm, packPackage)
++        val res = resources ?: return null
++        val activity = info.activityInfo ?: return null
++        val name = mapping["${activity.packageName}/${activity.name}"] ?: return null
++        var id = res.getIdentifier(name, "drawable", packPackage)
++        if (id == 0) id = res.getIdentifier(name, "mipmap", packPackage)
++        if (id == 0) return null
++        return try {
++            ResourcesCompat.getDrawable(res, id, null)
++        } catch (_: Exception) { null }
++    }
++
++    private fun ensureLoaded(pm: PackageManager, packPackage: String) {
++        if (loadedPackage == packPackage) return
++        loadedPackage = packPackage
++        resources = null
++        mapping = emptyMap()
++        try {
++            val res = pm.getResourcesForApplication(packPackage)
++            mapping = readAppFilter(res, packPackage)
++            resources = res
++        } catch (_: Exception) {
++            // Pack removed or without a readable appfilter: keep the normal icons
++        }
++    }
++
++    private fun readAppFilter(res: Resources, packPackage: String): Map<String, String> {
++        val parser: XmlPullParser
++        val xmlId = res.getIdentifier("appfilter", "xml", packPackage)
++        if (xmlId != 0) {
++            parser = res.getXml(xmlId)
++        } else {
++            parser = Xml.newPullParser()
++            parser.setInput(res.assets.open("appfilter.xml"), null)
++        }
++        val map = HashMap<String, String>()
++        var event = parser.eventType
++        while (event != XmlPullParser.END_DOCUMENT) {
++            if (event == XmlPullParser.START_TAG && parser.name == "item") {
++                val component = parser.getAttributeValue(null, "component")
++                val drawable = parser.getAttributeValue(null, "drawable")
++                if (component != null && drawable != null && component.contains("{")) {
++                    val key = component.substringAfter("{").substringBefore("}")
++                    val pkg = key.substringBefore("/")
++                    var cls = key.substringAfter("/", "")
++                    if (cls.startsWith(".")) cls = pkg + cls
++                    if (pkg.isNotEmpty() && cls.isNotEmpty()) {
++                        map.putIfAbsent("$pkg/$cls", drawable)
++                    }
++                }
++            }
++            event = parser.next()
++        }
++        return map
++    }
++}
+diff --git a/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt b/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt
+index 7140751..4022f12 100755
+--- a/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt
++++ b/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt
+@@ -50,6 +50,7 @@ import android.widget.*
+ import androidx.activity.OnBackPressedCallback
+ import androidx.activity.result.contract.ActivityResultContracts
+ import androidx.appcompat.app.AlertDialog
++import com.eightbit.samsprung.drawer.IconPacks
+ import com.eightbit.samsprung.speech.DictationLog
+ import androidx.appcompat.app.AppCompatActivity
+ import androidx.appcompat.widget.AppCompatCheckBox
+@@ -837,6 +838,42 @@ class CoverPreferences : AppCompatActivity() {
+             DecimalFormatSymbols.getInstance().infinity).toString()
+         setSuperscriptText(timeoutText, R.string.options_timeout, textDelay)
+ 
++        val iconPackText = findViewById<TextView>(R.id.icon_pack_text)
++        fun showIconPack() {
++            val pack = prefs.getString(Preferences.prefIconPack, "") ?: ""
++            iconPackText.text = if (pack.isEmpty()) getString(R.string.icon_pack_default) else try {
++                packageManager.getApplicationInfo(pack, 0).loadLabel(packageManager).toString()
++            } catch (_: Exception) { pack }
++        }
++        showIconPack()
++        findViewById<LinearLayout>(R.id.icon_pack_row).setOnClickListener {
++            val packs = IconPacks.installed(packageManager)
++            if (packs.isEmpty()) {
++                Toast.makeText(this, R.string.icon_pack_none, Toast.LENGTH_LONG).show()
++                return@setOnClickListener
++            }
++            val names = (listOf(getString(R.string.icon_pack_default)) + packs.map { it.label })
++                .toTypedArray()
++            AlertDialog.Builder(this)
++                .setTitle(R.string.options_icon_pack)
++                .setItems(names) { dialog, which ->
++                    with(prefs.edit()) {
++                        putString(Preferences.prefIconPack, if (which == 0) "" else packs[which - 1].packageName)
++                        apply()
++                    }
++                    showIconPack()
++                    dialog.dismiss()
++                }.show()
++        }
++
++        findViewById<TextView>(R.id.icon_assign_row).setOnClickListener {
++            if ((prefs.getString(Preferences.prefIconPack, "") ?: "").isEmpty()) {
++                Toast.makeText(this, R.string.icon_pack_select_first, Toast.LENGTH_LONG).show()
++            } else {
++                startActivity(Intent(this, IconAssignActivity::class.java))
++            }
++        }
++
+         val isGridView = prefs.getBoolean(Preferences.prefLayout, true)
+         findViewById<ToggleButton>(R.id.swapViewType).isChecked = isGridView
+         findViewById<ToggleButton>(R.id.swapViewType).setOnCheckedChangeListener { _, isChecked ->
+diff --git a/app/src/main/java/com/eightbit/samsprung/settings/IconAssignActivity.kt b/app/src/main/java/com/eightbit/samsprung/settings/IconAssignActivity.kt
+new file mode 100644
+index 0000000..7d8ba90
+--- /dev/null
++++ b/app/src/main/java/com/eightbit/samsprung/settings/IconAssignActivity.kt
+@@ -0,0 +1,212 @@
++package com.eightbit.samsprung.settings
++
++import android.content.Intent
++import android.content.SharedPreferences
++import android.content.pm.ResolveInfo
++import android.os.Bundle
++import android.text.Editable
++import android.text.TextWatcher
++import android.view.LayoutInflater
++import android.view.View
++import android.view.ViewGroup
++import android.widget.CheckBox
++import android.widget.EditText
++import android.widget.ImageView
++import android.widget.TextView
++import android.widget.Toast
++import androidx.appcompat.app.AlertDialog
++import androidx.appcompat.app.AppCompatActivity
++import androidx.recyclerview.widget.GridLayoutManager
++import androidx.recyclerview.widget.LinearLayoutManager
++import androidx.recyclerview.widget.RecyclerView
++import com.eightbit.samsprung.R
++import com.eightbit.samsprung.drawer.IconPacks
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.withContext
++
++/**
++ * Lets the user choose, for the apps the selected icon pack has no icon for, one of the icons of
++ * the pack. The choice is used by the app drawer of the cover display.
++ */
++class IconAssignActivity : AppCompatActivity() {
++
++    private class Entry(val info: ResolveInfo, val label: String, val hasPackIcon: Boolean)
++
++    private val prefs: SharedPreferences by lazy {
++        getSharedPreferences(Preferences.prefsValue, MODE_PRIVATE)
++    }
++
++    private var pack = ""
++    private val all = ArrayList<Entry>()
++    private val shown = ArrayList<Entry>()
++    private var onlyMissing = true
++    private lateinit var adapter: EntryAdapter
++
++    override fun onCreate(savedInstanceState: Bundle?) {
++        super.onCreate(savedInstanceState)
++        pack = prefs.getString(Preferences.prefIconPack, "") ?: ""
++        if (pack.isEmpty()) {
++            Toast.makeText(this, R.string.icon_pack_select_first, Toast.LENGTH_LONG).show()
++            finish()
++            return
++        }
++        setContentView(R.layout.activity_icon_assign)
++        supportActionBar?.setDisplayHomeAsUpEnabled(true)
++
++        adapter = EntryAdapter()
++        findViewById<RecyclerView>(R.id.icon_assign_list).apply {
++            layoutManager = LinearLayoutManager(this@IconAssignActivity)
++            adapter = this@IconAssignActivity.adapter
++        }
++        findViewById<CheckBox>(R.id.icon_assign_only_missing).apply {
++            isChecked = onlyMissing
++            setOnCheckedChangeListener { _, checked ->
++                onlyMissing = checked
++                applyFilter()
++            }
++        }
++        loadApps()
++    }
++
++    override fun onSupportNavigateUp(): Boolean {
++        finish()
++        return true
++    }
++
++    private fun loadApps() {
++        CoroutineScope(Dispatchers.IO).launch {
++            val pm = packageManager
++            val launchables = pm.queryIntentActivities(
++                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0
++            )
++            val entries = launchables.map {
++                Entry(it, it.loadLabel(pm).toString(), IconPacks.hasPackIcon(pm, pack, it))
++            }.sortedBy { it.label.lowercase() }
++            withContext(Dispatchers.Main) {
++                all.clear()
++                all.addAll(entries)
++                applyFilter()
++            }
++        }
++    }
++
++    private fun applyFilter() {
++        shown.clear()
++        shown.addAll(if (onlyMissing) all.filter { !it.hasPackIcon } else all)
++        adapter.notifyDataSetChanged()
++    }
++
++    private fun showPicker(entry: Entry) {
++        val view = LayoutInflater.from(this).inflate(R.layout.icon_picker_dialog, null)
++        val grid = view.findViewById<RecyclerView>(R.id.icon_grid)
++        val search = view.findViewById<EditText>(R.id.icon_search)
++        val picker = PickerAdapter()
++        grid.layoutManager = GridLayoutManager(this, 5)
++        grid.adapter = picker
++
++        val dialog = AlertDialog.Builder(this)
++            .setTitle(entry.label)
++            .setView(view)
++            .setNegativeButton(R.string.button_cancel) { d, _ -> d.dismiss() }
++            .setNeutralButton(R.string.icon_assign_clear) { d, _ ->
++                IconPacks.assign(prefs, pack, entry.info, null)
++                adapter.notifyDataSetChanged()
++                d.dismiss()
++            }.create()
++        picker.onPick = { name ->
++            IconPacks.assign(prefs, pack, entry.info, name)
++            adapter.notifyDataSetChanged()
++            dialog.dismiss()
++        }
++        search.addTextChangedListener(object : TextWatcher {
++            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) { }
++            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {
++                picker.filter(s?.toString() ?: "")
++            }
++            override fun afterTextChanged(s: Editable?) { }
++        })
++        dialog.show()
++
++        CoroutineScope(Dispatchers.IO).launch {
++            val names = IconPacks.drawableNames(packageManager, pack)
++            withContext(Dispatchers.Main) { picker.setNames(names) }
++        }
++    }
++
++    private inner class EntryAdapter : RecyclerView.Adapter<EntryAdapter.Holder>() {
++        inner class Holder(view: View) : RecyclerView.ViewHolder(view) {
++            val icon: ImageView = view.findViewById(R.id.assign_icon)
++            val label: TextView = view.findViewById(R.id.assign_label)
++            val state: TextView = view.findViewById(R.id.assign_state)
++        }
++
++        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = Holder(
++            LayoutInflater.from(parent.context).inflate(R.layout.icon_assign_item, parent, false)
++        )
++
++        override fun getItemCount() = shown.size
++
++        override fun onBindViewHolder(holder: Holder, position: Int) {
++            val entry = shown[position]
++            val pm = packageManager
++            holder.label.text = entry.label
++            holder.icon.setImageDrawable(
++                IconPacks.themedIcon(pm, prefs, pack, entry.info) ?: entry.info.loadIcon(pm)
++            )
++            val assigned = IconPacks.assignedName(prefs, pack, entry.info)
++            holder.state.text = when {
++                assigned != null -> getString(R.string.icon_assign_assigned, assigned)
++                !entry.hasPackIcon -> getString(R.string.icon_assign_missing)
++                else -> ""
++            }
++            holder.itemView.setOnClickListener { showPicker(entry) }
++            holder.itemView.setOnLongClickListener {
++                IconPacks.assign(prefs, pack, entry.info, null)
++                notifyDataSetChanged()
++                true
++            }
++        }
++    }
++
++    private inner class PickerAdapter : RecyclerView.Adapter<PickerAdapter.Holder>() {
++        var onPick: (String) -> Unit = { }
++        private var names: List<String> = emptyList()
++        private var visible: List<String> = emptyList()
++        private var query = ""
++
++        inner class Holder(val image: ImageView) : RecyclerView.ViewHolder(image)
++
++        fun setNames(list: List<String>) {
++            names = list
++            filter(query)
++        }
++
++        fun filter(text: String) {
++            query = text.trim()
++            val wanted = query.lowercase().replace(' ', '_')
++            visible = if (wanted.isEmpty()) names else names.filter { it.lowercase().contains(wanted) }
++            notifyDataSetChanged()
++        }
++
++        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
++            val size = (56 * parent.resources.displayMetrics.density).toInt()
++            return Holder(ImageView(parent.context).apply {
++                layoutParams = RecyclerView.LayoutParams(size, size)
++                val pad = (4 * resources.displayMetrics.density).toInt()
++                setPadding(pad, pad, pad, pad)
++            })
++        }
++
++        override fun getItemCount() = visible.size
++
++        override fun onBindViewHolder(holder: Holder, position: Int) {
++            val name = visible[position]
++            val icon = IconPacks.iconByName(packageManager, pack, name)
++            holder.image.contentDescription = name
++            holder.image.setImageDrawable(icon?.let { IconPacks.circled(it) })
++            holder.image.setOnClickListener { onPick(name) }
++        }
++    }
++}
+diff --git a/app/src/main/java/com/eightbit/samsprung/settings/Preferences.kt b/app/src/main/java/com/eightbit/samsprung/settings/Preferences.kt
+index 572fa96..840dda8 100644
+--- a/app/src/main/java/com/eightbit/samsprung/settings/Preferences.kt
++++ b/app/src/main/java/com/eightbit/samsprung/settings/Preferences.kt
+@@ -23,4 +23,5 @@ object Preferences {
+     const val prefUpdate: String = "prefUpdate"
+     const val prefZoom: String = "prefZoom"
+     const val prefDictation: String = "prefDictation"
++    const val prefIconPack: String = "prefIconPack"
+ }
+\ No newline at end of file
+diff --git a/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt b/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
+index 627eaa0..cf3b0dc 100644
+--- a/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
++++ b/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
+@@ -51,6 +51,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+     private var verifiedAt = 0L
+     /** Placeholder texts ("Mensaje"...) that apps report as if they were the content. */
+     private val placeholders = HashSet<String>()
++    private var probing = false
+ 
+     /** Shows (or moves) the microphone next to [field]. */
+     fun show(field: AccessibilityNodeInfo, displayId: Int = -1) {
+@@ -97,6 +98,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+     }
+ 
+     private fun removeWindow() {
++        stopRepeat()
+         rootView?.let {
+             try {
+                 if (it.parent != null) windowManager?.removeView(it)
+@@ -164,13 +166,12 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+                 when (event.actionMasked) {
+                     MotionEvent.ACTION_DOWN -> {
+                         v.isPressed = true
+-                        deleteLast()
+-                        handler.removeCallbacks(repeatDelete)
+-                        handler.postDelayed(repeatDelete, 450)
++                        stopRepeat()
++                        if (deleteLast()) handler.postDelayed(repeatDelete, 450)
+                     }
+                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                         v.isPressed = false
+-                        handler.removeCallbacks(repeatDelete)
++                        stopRepeat()
+                     }
+                 }
+                 true
+@@ -202,6 +203,8 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+     }
+ 
+     private fun onMicClicked() {
++        stopRepeat()
++        probing = false
+         val field = target ?: return
+         if (dictation.isListening) {
+             dictation.stop()
+@@ -276,34 +279,45 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+ 
+     private val repeatDelete = object : Runnable {
+         override fun run() {
+-            deleteLast()
+-            handler.postDelayed(this, 120)
++            // Stop as soon as there is nothing left to delete
++            if (deleteLast()) handler.postDelayed(this, 120)
+         }
+     }
+ 
+-    /** Deletes the last character of the field, ignoring app placeholders. */
+-    private fun deleteLast() {
+-        val field = target ?: return
+-        // A dictation in progress would write its text again right after the deletion
+-        if (dictation.isListening) dictation.destroy()
++    private fun stopRepeat() {
++        handler.removeCallbacks(repeatDelete)
++    }
++
++    /**
++     * Deletes the last character of the field, ignoring app placeholders.
++     * Returns false when there is nothing (more) to delete.
++     */
++    private fun deleteLast(): Boolean {
++        val field = target ?: return false
++        // Waiting for the check of a previous press: keep going, but do nothing yet
++        if (probing) return true
+ 
+         val recent = verifiedText != null && SystemClock.uptimeMillis() - verifiedAt < 1500
+         val current: String
+         if (recent) {
+             // The field may not have shown our last change yet, so trust what we wrote
+-            current = verifiedText ?: return
++            current = verifiedText ?: return false
+         } else {
+             field.refresh()
+             current = field.text?.toString() ?: ""
+         }
+-        if (current.isEmpty() || field.isShowingHintText || current in placeholders) return
++        if (current.isEmpty() || field.isShowingHintText || current in placeholders) return false
++        // A dictation in progress would write its text again right after the deletion
++        if (dictation.isListening) dictation.destroy()
+         if (recent || current == verifiedText) {
+             eraseOne(field, current)
+-            return
++            return true
+         }
+         // Not sure whether this is real text or a placeholder: clear and look again
++        probing = true
+         setFieldText(field, "")
+         handler.postDelayed({
++            probing = false
+             field.refresh()
+             val after = field.text?.toString() ?: ""
+             if (after.isNotEmpty() && after == current) {
+@@ -312,6 +326,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+                 eraseOne(field, current)
+             }
+         }, 250)
++        return true
+     }
+ 
+     private fun eraseOne(field: AccessibilityNodeInfo, current: String) {
+diff --git a/app/src/main/res/layout/activity_icon_assign.xml b/app/src/main/res/layout/activity_icon_assign.xml
+new file mode 100644
+index 0000000..d863639
+--- /dev/null
++++ b/app/src/main/res/layout/activity_icon_assign.xml
+@@ -0,0 +1,29 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:orientation="vertical"
++    android:padding="12dp">
++
++    <TextView
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginBottom="8dp"
++        android:text="@string/icon_assign_hint"
++        android:textColor="?android:textColorSecondary"
++        android:textSize="14sp" />
++
++    <CheckBox
++        android:id="@+id/icon_assign_only_missing"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:minHeight="48dp"
++        android:text="@string/icon_assign_only_missing"
++        android:textColor="?android:textColorPrimary" />
++
++    <androidx.recyclerview.widget.RecyclerView
++        android:id="@+id/icon_assign_list"
++        android:layout_width="match_parent"
++        android:layout_height="0dp"
++        android:layout_weight="1" />
++</LinearLayout>
+diff --git a/app/src/main/res/layout/icon_assign_item.xml b/app/src/main/res/layout/icon_assign_item.xml
+new file mode 100644
+index 0000000..fb93b77
+--- /dev/null
++++ b/app/src/main/res/layout/icon_assign_item.xml
+@@ -0,0 +1,37 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent"
++    android:layout_height="wrap_content"
++    android:minHeight="56dp"
++    android:gravity="center_vertical"
++    android:orientation="horizontal"
++    android:paddingVertical="4dp">
++
++    <ImageView
++        android:id="@+id/assign_icon"
++        android:layout_width="44dp"
++        android:layout_height="44dp"
++        android:contentDescription="@null" />
++
++    <LinearLayout
++        android:layout_width="0dp"
++        android:layout_height="wrap_content"
++        android:layout_marginStart="12dp"
++        android:layout_weight="1"
++        android:orientation="vertical">
++
++        <TextView
++            android:id="@+id/assign_label"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:textColor="?android:textColorPrimary"
++            android:textSize="16sp" />
++
++        <TextView
++            android:id="@+id/assign_state"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:textColor="?android:textColorSecondary"
++            android:textSize="13sp" />
++    </LinearLayout>
++</LinearLayout>
+diff --git a/app/src/main/res/layout/icon_picker_dialog.xml b/app/src/main/res/layout/icon_picker_dialog.xml
+new file mode 100644
+index 0000000..53e3857
+--- /dev/null
++++ b/app/src/main/res/layout/icon_picker_dialog.xml
+@@ -0,0 +1,22 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent"
++    android:layout_height="wrap_content"
++    android:orientation="vertical"
++    android:padding="12dp">
++
++    <EditText
++        android:id="@+id/icon_search"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:hint="@string/icon_assign_search"
++        android:imeOptions="actionSearch"
++        android:importantForAutofill="no"
++        android:inputType="text"
++        android:minHeight="48dp" />
++
++    <androidx.recyclerview.widget.RecyclerView
++        android:id="@+id/icon_grid"
++        android:layout_width="match_parent"
++        android:layout_height="360dp" />
++</LinearLayout>
+diff --git a/app/src/main/res/layout/prefs_drawer.xml b/app/src/main/res/layout/prefs_drawer.xml
+index 5a5d44e..f070428 100755
+--- a/app/src/main/res/layout/prefs_drawer.xml
++++ b/app/src/main/res/layout/prefs_drawer.xml
+@@ -234,6 +234,47 @@
+             android:max="60"/>
+     </LinearLayout>
+ 
++    <LinearLayout
++        android:id="@+id/icon_pack_row"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:orientation="horizontal"
++        android:layout_marginStart="16dp"
++        android:layout_marginEnd="8dp"
++        android:gravity="center_vertical"
++        android:layout_gravity="center_vertical">
++
++        <TextView
++            android:layout_width="0dp"
++            android:layout_weight="1"
++            android:textSize="24sp"
++            android:textColor="?android:textColorPrimary"
++            android:gravity="center_vertical"
++            android:layout_height="wrap_content"
++            android:text="@string/options_icon_pack" />
++
++        <TextView
++            android:id="@+id/icon_pack_text"
++            android:layout_width="0dp"
++            android:layout_weight="1"
++            android:textSize="20sp"
++            android:textColor="?android:textColorSecondary"
++            android:gravity="end|center_vertical"
++            android:layout_height="wrap_content" />
++    </LinearLayout>
++
++    <TextView
++        android:id="@+id/icon_assign_row"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginStart="16dp"
++        android:layout_marginEnd="8dp"
++        android:minHeight="48dp"
++        android:textSize="20sp"
++        android:textColor="?android:textColorPrimary"
++        android:gravity="center_vertical"
++        android:text="@string/icon_assign_title" />
++
+     <androidx.appcompat.widget.AppCompatToggleButton
+         android:id="@+id/swapViewType"
+         android:layout_width="match_parent"
+diff --git a/app/src/main/res/values-es/strings.xml b/app/src/main/res/values-es/strings.xml
+index 1ed95cd..e07a6fd 100644
+--- a/app/src/main/res/values-es/strings.xml
++++ b/app/src/main/res/values-es/strings.xml
+@@ -156,4 +156,16 @@
+     <string name="dictation_mic">Dictar</string>
+     <string name="dictation_log_clear">Borrar registro</string>
+     <string name="dictation_erase">Borrar último carácter</string>
++    <string name="options_icon_pack">Paquete de iconos</string>
++    <string name="icon_pack_default">Iconos del sistema</string>
++    <string name="icon_pack_none">No hay paquetes de iconos instalados</string>
++    <string name="icon_assign_title">Asignar iconos a apps</string>
++    <string name="icon_assign_hint">Elige un icono del paquete para las apps que no lo tienen. Toca una app para elegir su icono, mantenla pulsada para quitar la asignación.</string>
++    <string name="icon_assign_only_missing">Solo apps sin icono en el paquete</string>
++    <string name="icon_assign_pick">Elige un icono</string>
++    <string name="icon_assign_clear">Quitar asignación</string>
++    <string name="icon_assign_search">Buscar iconos</string>
++    <string name="icon_pack_select_first">Elige primero un paquete de iconos</string>
++    <string name="icon_assign_missing">Sin icono en el paquete</string>
++    <string name="icon_assign_assigned">Asignado: %1$s</string>
+ </resources>
+\ No newline at end of file
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index f800103..5752bc3 100755
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -156,4 +156,16 @@
+     <string name="dictation_mic">Dictate</string>
+     <string name="dictation_log_clear">Clear log</string>
+     <string name="dictation_erase">Delete last character</string>
++    <string name="options_icon_pack">Icon pack</string>
++    <string name="icon_pack_default">System icons</string>
++    <string name="icon_pack_none">No icon packs are installed</string>
++    <string name="icon_assign_title">Assign icons to apps</string>
++    <string name="icon_assign_hint">Pick an icon of the pack for the apps it does not cover. Tap an app to choose its icon, hold it to remove the assignment.</string>
++    <string name="icon_assign_only_missing">Only apps without an icon in the pack</string>
++    <string name="icon_assign_pick">Choose an icon</string>
++    <string name="icon_assign_clear">Remove assignment</string>
++    <string name="icon_assign_search">Search icons</string>
++    <string name="icon_pack_select_first">Choose an icon pack first</string>
++    <string name="icon_assign_missing">No icon in the pack</string>
++    <string name="icon_assign_assigned">Assigned: %1$s</string>
+ </resources>
+\ No newline at end of file

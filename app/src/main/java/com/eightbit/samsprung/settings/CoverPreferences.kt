@@ -50,6 +50,7 @@ import android.widget.*
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
+import com.eightbit.samsprung.drawer.IconPacks
 import com.eightbit.samsprung.speech.DictationLog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatCheckBox
@@ -836,6 +837,42 @@ class CoverPreferences : AppCompatActivity() {
         val textDelay = (if (timeoutBar.progress > 4) timeoutBar.progress else
             DecimalFormatSymbols.getInstance().infinity).toString()
         setSuperscriptText(timeoutText, R.string.options_timeout, textDelay)
+
+        val iconPackText = findViewById<TextView>(R.id.icon_pack_text)
+        fun showIconPack() {
+            val pack = prefs.getString(Preferences.prefIconPack, "") ?: ""
+            iconPackText.text = if (pack.isEmpty()) getString(R.string.icon_pack_default) else try {
+                packageManager.getApplicationInfo(pack, 0).loadLabel(packageManager).toString()
+            } catch (_: Exception) { pack }
+        }
+        showIconPack()
+        findViewById<LinearLayout>(R.id.icon_pack_row).setOnClickListener {
+            val packs = IconPacks.installed(packageManager)
+            if (packs.isEmpty()) {
+                Toast.makeText(this, R.string.icon_pack_none, Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            val names = (listOf(getString(R.string.icon_pack_default)) + packs.map { it.label })
+                .toTypedArray()
+            AlertDialog.Builder(this)
+                .setTitle(R.string.options_icon_pack)
+                .setItems(names) { dialog, which ->
+                    with(prefs.edit()) {
+                        putString(Preferences.prefIconPack, if (which == 0) "" else packs[which - 1].packageName)
+                        apply()
+                    }
+                    showIconPack()
+                    dialog.dismiss()
+                }.show()
+        }
+
+        findViewById<TextView>(R.id.icon_assign_row).setOnClickListener {
+            if ((prefs.getString(Preferences.prefIconPack, "") ?: "").isEmpty()) {
+                Toast.makeText(this, R.string.icon_pack_select_first, Toast.LENGTH_LONG).show()
+            } else {
+                startActivity(Intent(this, IconAssignActivity::class.java))
+            }
+        }
 
         val isGridView = prefs.getBoolean(Preferences.prefLayout, true)
         findViewById<ToggleButton>(R.id.swapViewType).isChecked = isGridView

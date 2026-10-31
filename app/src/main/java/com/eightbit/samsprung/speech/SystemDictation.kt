@@ -51,6 +51,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
     private var verifiedAt = 0L
     /** Placeholder texts ("Mensaje"...) that apps report as if they were the content. */
     private val placeholders = HashSet<String>()
+    private var probing = false
 
     /** Shows (or moves) the microphone next to [field]. */
     fun show(field: AccessibilityNodeInfo, displayId: Int = -1) {
@@ -97,6 +98,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
     }
 
     private fun removeWindow() {
+        stopRepeat()
         rootView?.let {
             try {
                 if (it.parent != null) windowManager?.removeView(it)
@@ -164,13 +166,12 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
                         v.isPressed = true
-                        deleteLast()
-                        handler.removeCallbacks(repeatDelete)
-                        handler.postDelayed(repeatDelete, 450)
+                        stopRepeat()
+                        if (deleteLast()) handler.postDelayed(repeatDelete, 450)
                     }
                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                         v.isPressed = false
-                        handler.removeCallbacks(repeatDelete)
+                        stopRepeat()
                     }
                 }
                 true
@@ -202,6 +203,8 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
     }
 
     private fun onMicClicked() {
+        stopRepeat()
+        probing = false
         val field = target ?: return
         if (dictation.isListening) {
             dictation.stop()
@@ -276,34 +279,45 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
 
     private val repeatDelete = object : Runnable {
         override fun run() {
-            deleteLast()
-            handler.postDelayed(this, 120)
+            // Stop as soon as there is nothing left to delete
+            if (deleteLast()) handler.postDelayed(this, 120)
         }
     }
 
-    /** Deletes the last character of the field, ignoring app placeholders. */
-    private fun deleteLast() {
-        val field = target ?: return
-        // A dictation in progress would write its text again right after the deletion
-        if (dictation.isListening) dictation.destroy()
+    private fun stopRepeat() {
+        handler.removeCallbacks(repeatDelete)
+    }
+
+    /**
+     * Deletes the last character of the field, ignoring app placeholders.
+     * Returns false when there is nothing (more) to delete.
+     */
+    private fun deleteLast(): Boolean {
+        val field = target ?: return false
+        // Waiting for the check of a previous press: keep going, but do nothing yet
+        if (probing) return true
 
         val recent = verifiedText != null && SystemClock.uptimeMillis() - verifiedAt < 1500
         val current: String
         if (recent) {
             // The field may not have shown our last change yet, so trust what we wrote
-            current = verifiedText ?: return
+            current = verifiedText ?: return false
         } else {
             field.refresh()
             current = field.text?.toString() ?: ""
         }
-        if (current.isEmpty() || field.isShowingHintText || current in placeholders) return
+        if (current.isEmpty() || field.isShowingHintText || current in placeholders) return false
+        // A dictation in progress would write its text again right after the deletion
+        if (dictation.isListening) dictation.destroy()
         if (recent || current == verifiedText) {
             eraseOne(field, current)
-            return
+            return true
         }
         // Not sure whether this is real text or a placeholder: clear and look again
+        probing = true
         setFieldText(field, "")
         handler.postDelayed({
+            probing = false
             field.refresh()
             val after = field.text?.toString() ?: ""
             if (after.isNotEmpty() && after == current) {
@@ -312,6 +326,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
                 eraseOne(field, current)
             }
         }, 250)
+        return true
     }
 
     private fun eraseOne(field: AccessibilityNodeInfo, current: String) {

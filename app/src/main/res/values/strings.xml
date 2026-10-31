@@ -156,4 +156,16 @@
     <string name="dictation_mic">Dictate</string>
     <string name="dictation_log_clear">Clear log</string>
     <string name="dictation_erase">Delete last character</string>
+    <string name="options_icon_pack">Icon pack</string>
+    <string name="icon_pack_default">System icons</string>
+    <string name="icon_pack_none">No icon packs are installed</string>
+    <string name="icon_assign_title">Assign icons to apps</string>
+    <string name="icon_assign_hint">Pick an icon of the pack for the apps it does not cover. Tap an app to choose its icon, hold it to remove the assignment.</string>
+    <string name="icon_assign_only_missing">Only apps without an icon in the pack</string>
+    <string name="icon_assign_pick">Choose an icon</string>
+    <string name="icon_assign_clear">Remove assignment</string>
+    <string name="icon_assign_search">Search icons</string>
+    <string name="icon_pack_select_first">Choose an icon pack first</string>
+    <string name="icon_assign_missing">No icon in the pack</string>
+    <string name="icon_assign_assigned">Assigned: %1$s</string>
 </resources>
