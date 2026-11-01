@@ -168,4 +168,9 @@
     <string name="icon_pack_select_first">Choose an icon pack first</string>
     <string name="icon_assign_missing">No icon in the pack</string>
     <string name="icon_assign_assigned">Assigned: %1$s</string>
+    <string name="orientation_header_apps">Apps</string>
+    <string name="orientation_header_visible">Visible</string>
+    <string name="orientation_header_default">Default</string>
+    <string name="orientation_header_vertical">Vertical</string>
+    <string name="orientation_header_horizontal">Horizontal</string>
 </resources>

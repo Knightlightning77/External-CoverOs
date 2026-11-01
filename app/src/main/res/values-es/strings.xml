@@ -168,4 +168,9 @@
     <string name="icon_pack_select_first">Elige primero un paquete de iconos</string>
     <string name="icon_assign_missing">Sin icono en el paquete</string>
     <string name="icon_assign_assigned">Asignado: %1$s</string>
+    <string name="orientation_header_apps">Aplicaciones</string>
+    <string name="orientation_header_visible">Visible</string>
+    <string name="orientation_header_default">Predet.</string>
+    <string name="orientation_header_vertical">Vertical</string>
+    <string name="orientation_header_horizontal">Horiz.</string>
 </resources>

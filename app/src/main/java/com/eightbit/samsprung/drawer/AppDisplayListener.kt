@@ -311,8 +311,8 @@ class AppDisplayListener : Service() {
     }
 
     fun onDismissOverlay() {
-        if (prefs.getBoolean(Preferences.prefRotate, false))
-            OrientationManager(this).removeOrientationLayout()
+        // Also when an app was opened with its own orientation, not only with the rotation lock
+        OrientationManager(this).removeOrientationLayout()
         try {
             with (getSystemService(DISPLAY_SERVICE) as DisplayManager) {
                 unregisterDisplayListener(mDisplayListener)

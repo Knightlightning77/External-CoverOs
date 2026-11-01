@@ -19,6 +19,7 @@ import com.eightbit.content.ScaledContext
 import com.eightbit.io.Debug
 import com.eightbit.samsprung.SamSprung
 import com.eightbit.samsprung.SamSprungOverlay
+import com.eightbit.samsprung.settings.AppOrientation
 import com.eightbit.samsprung.settings.Preferences
 
 class LauncherManager(private val overlay: SamSprungOverlay) {
@@ -33,7 +34,13 @@ class LauncherManager(private val overlay: SamSprungOverlay) {
     private fun postOrientationHandler(extras: Bundle) {
         val isOppoDevice = Debug.isOppoDevice
         val orientationLock = OrientationManager(overlay)
-        if (isOppoDevice) {
+        // Orientation chosen for this app in the settings of the main display
+        val appMode = AppOrientation.get(prefs, extras.getString("launchPackage"))
+        if (appMode == AppOrientation.HORIZONTAL) {
+            orientationLock.addOrientationLayout(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)
+        } else if (appMode == AppOrientation.VERTICAL) {
+            orientationLock.addOrientationLayout(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
+        } else if (isOppoDevice) {
             if (prefs.getBoolean(Preferences.prefRotate, false))
                 orientationLock.addOrientationLayout(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)
         } else {
@@ -41,7 +48,7 @@ class LauncherManager(private val overlay: SamSprungOverlay) {
         }
         Handler(Looper.getMainLooper()).postDelayed({
             // All apps are launched in portrait to prevent crashes related to orientation
-            if (!prefs.getBoolean(Preferences.prefRotate, false)) {
+            if (appMode == AppOrientation.DEFAULT && !prefs.getBoolean(Preferences.prefRotate, false)) {
                 if (!isOppoDevice) orientationLock.removeOrientationLayout()
                 overlay.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             }

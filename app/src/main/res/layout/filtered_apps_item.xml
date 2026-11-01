@@ -8,34 +8,60 @@
     android:paddingStart="2dp"
     android:paddingEnd="4dp"
     android:layout_gravity="center"
+    android:gravity="center_vertical"
     android:orientation="horizontal"
     tools:ignore="UseCompoundDrawables">
 
-        <androidx.appcompat.widget.AppCompatImageView
-            android:id="@+id/hiddenItemImage"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="4dp"
-            android:layout_gravity="center"
-            android:contentDescription="@string/description_icon" />
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/hiddenItemImage"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginStart="2dp"
+        android:layout_gravity="center"
+        android:contentDescription="@string/description_icon" />
 
-        <TextView
-            android:id="@+id/hiddenItemText"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:paddingStart="8dp"
-            android:paddingEnd="0dp"
-            android:textSize="24sp"
-            android:textColor="?android:textColorPrimary"
-            android:layout_gravity="center"
-            android:gravity="center"
-            android:layout_height="wrap_content" />
+    <TextView
+        android:id="@+id/hiddenItemText"
+        android:layout_width="0dp"
+        android:layout_weight="1"
+        android:paddingStart="6dp"
+        android:paddingEnd="0dp"
+        android:textSize="16sp"
+        android:maxLines="2"
+        android:ellipsize="end"
+        android:textColor="?android:textColorPrimary"
+        android:layout_gravity="center"
+        android:gravity="center_vertical"
+        android:layout_height="wrap_content" />
 
     <Switch
         android:id="@+id/hiddenItemSwitch"
-        android:layout_width="56dp"
+        android:layout_width="52dp"
         android:layout_height="48dp"
-        android:layout_marginEnd="4dp"
-        android:layout_gravity="end|center_vertical"
+        android:layout_gravity="center_vertical"
         tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+    <androidx.appcompat.widget.AppCompatCheckBox
+        android:id="@+id/orientDefault"
+        android:layout_width="44dp"
+        android:layout_height="48dp"
+        android:gravity="center"
+        android:button="@null"
+        android:drawableEnd="?android:attr/listChoiceIndicatorMultiple" />
+
+    <androidx.appcompat.widget.AppCompatCheckBox
+        android:id="@+id/orientVertical"
+        android:layout_width="44dp"
+        android:layout_height="48dp"
+        android:gravity="center"
+        android:button="@null"
+        android:drawableEnd="?android:attr/listChoiceIndicatorMultiple" />
+
+    <androidx.appcompat.widget.AppCompatCheckBox
+        android:id="@+id/orientHorizontal"
+        android:layout_width="44dp"
+        android:layout_height="48dp"
+        android:gravity="center"
+        android:button="@null"
+        android:drawableEnd="?android:attr/listChoiceIndicatorMultiple" />
 </LinearLayout>

@@ -21,6 +21,7 @@ import android.content.pm.ResolveInfo
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.TextView
@@ -119,8 +120,29 @@ class FilteredAppsAdapter(
             @SuppressLint("UseSwitchCompatOrMaterialCode")
             val hideSwitch = detailView.findViewById<Switch>(R.id.hiddenItemSwitch)
             hideSwitch.isChecked = !hide.contains(application.activityInfo.packageName)
+            // Apps that are not shown in the drawer are dimmed
+            detailView.alpha = if (hideSwitch.isChecked) 1f else 0.4f
+
+            val packageId = application.activityInfo.packageName
+            val boxes = listOf<CheckBox>(
+                detailView.findViewById(R.id.orientDefault),
+                detailView.findViewById(R.id.orientVertical),
+                detailView.findViewById(R.id.orientHorizontal)
+            )
+            fun showMode(mode: Int) {
+                boxes.forEachIndexed { index, box -> box.isChecked = index == mode }
+            }
+            showMode(AppOrientation.get(prefs, packageId))
+            boxes.forEachIndexed { index, box ->
+                // Exactly one option is always selected
+                box.setOnClickListener {
+                    AppOrientation.set(prefs, packageId, index)
+                    showMode(index)
+                }
+            }
 
             hideSwitch.setOnClickListener {
+                detailView.alpha = if (hideSwitch.isChecked) 1f else 0.4f
                 val packageName = application.activityInfo.packageName
                 if (hide.contains(packageName)) {
                     hide.remove(packageName)
