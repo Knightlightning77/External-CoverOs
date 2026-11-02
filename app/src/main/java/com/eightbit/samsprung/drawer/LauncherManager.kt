@@ -20,6 +20,7 @@ import com.eightbit.io.Debug
 import com.eightbit.samsprung.SamSprung
 import com.eightbit.samsprung.SamSprungOverlay
 import com.eightbit.samsprung.settings.AppOrientation
+import com.eightbit.samsprung.speech.DictationLog
 import com.eightbit.samsprung.settings.Preferences
 
 class LauncherManager(private val overlay: SamSprungOverlay) {
@@ -31,25 +32,66 @@ class LauncherManager(private val overlay: SamSprungOverlay) {
     val prefs: SharedPreferences = overlay.getSharedPreferences(
         Preferences.prefsValue, AppCompatActivity.MODE_PRIVATE)
 
+    /** Orientation lock added before the app starts, when the app has its own orientation. */
+    private var preLock: OrientationManager? = null
+
+    private fun forcedOrientation(mode: Int) = if (mode == AppOrientation.HORIZONTAL)
+        ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+
+    /**
+     * Apps with their own orientation (vertical / horizontal in the settings) are launched
+     * already under that lock, so they start in the right orientation.
+     */
+    private fun lockBeforeLaunch(pkg: String?) {
+        val mode = AppOrientation.get(prefs, pkg)
+        preLock = null
+        if (mode == AppOrientation.DEFAULT) return
+        val lock = OrientationManager(overlay)
+        try {
+            lock.addOrientationLayout(forcedOrientation(mode))
+            preLock = lock
+            DictationLog.add(overlay, "orientación: $pkg modo=$mode bloqueo añadido antes de abrir")
+        } catch (ex: Exception) {
+            DictationLog.add(overlay, "orientación: ERROR ${ex.javaClass.simpleName}: ${ex.message}")
+        }
+    }
+
     private fun postOrientationHandler(extras: Bundle) {
         val isOppoDevice = Debug.isOppoDevice
-        val orientationLock = OrientationManager(overlay)
         // Orientation chosen for this app in the settings of the main display
-        val appMode = AppOrientation.get(prefs, extras.getString("launchPackage"))
-        if (appMode == AppOrientation.HORIZONTAL) {
-            orientationLock.addOrientationLayout(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)
-        } else if (appMode == AppOrientation.VERTICAL) {
-            orientationLock.addOrientationLayout(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
-        } else if (isOppoDevice) {
-            if (prefs.getBoolean(Preferences.prefRotate, false))
-                orientationLock.addOrientationLayout(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)
+        val pkg = extras.getString("launchPackage")
+        val appMode = AppOrientation.get(prefs, pkg)
+        var orientationLock = preLock
+        preLock = null
+        if (appMode != AppOrientation.DEFAULT) {
+            if (orientationLock == null) {
+                orientationLock = OrientationManager(overlay)
+                try {
+                    orientationLock.addOrientationLayout(forcedOrientation(appMode))
+                    DictationLog.add(overlay, "orientación: $pkg modo=$appMode bloqueo añadido")
+                } catch (ex: Exception) {
+                    DictationLog.add(overlay, "orientación: ERROR ${ex.javaClass.simpleName}: ${ex.message}")
+                }
+            }
+            // Ask again once the app is on screen, in case the first request was too early
+            val lock = orientationLock
+            Handler(Looper.getMainLooper()).postDelayed({
+                lock.reassertOrientation(forcedOrientation(appMode))
+            }, 700)
         } else {
-            orientationLock.addOrientationLayout(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
+            orientationLock = OrientationManager(overlay)
+            if (isOppoDevice) {
+                if (prefs.getBoolean(Preferences.prefRotate, false))
+                    orientationLock.addOrientationLayout(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)
+            } else {
+                orientationLock.addOrientationLayout(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
+            }
         }
+        val lockForRemoval = orientationLock
         Handler(Looper.getMainLooper()).postDelayed({
             // All apps are launched in portrait to prevent crashes related to orientation
             if (appMode == AppOrientation.DEFAULT && !prefs.getBoolean(Preferences.prefRotate, false)) {
-                if (!isOppoDevice) orientationLock.removeOrientationLayout()
+                if (!isOppoDevice) lockForRemoval.removeOrientationLayout()
                 overlay.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             }
             overlay.onStopOverlay()
@@ -71,6 +113,7 @@ class LauncherManager(private val overlay: SamSprungOverlay) {
                 overlay.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LOCKED
                 overlay.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_BEHIND
 
+                lockBeforeLaunch(resolveInfo.activityInfo.packageName)
                 val intent = overlay.packageManager
                     .getLaunchIntentForPackage(resolveInfo.activityInfo.packageName)
                 launcher.startMainActivity(
@@ -100,6 +143,7 @@ class LauncherManager(private val overlay: SamSprungOverlay) {
                 overlay.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LOCKED
                 overlay.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_BEHIND
 
+                lockBeforeLaunch(appInfo.packageName)
                 val intent = overlay.packageManager.getLaunchIntentForPackage(appInfo.packageName)
                 launcher.startMainActivity(
                     intent?.component,
