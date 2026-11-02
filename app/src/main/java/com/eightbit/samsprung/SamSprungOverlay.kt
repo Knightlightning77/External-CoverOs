@@ -70,6 +70,7 @@ import com.eightbit.io.Debug
 import com.eightbit.material.IconifiedSnackbar
 import com.eightbit.os.Version
 import com.eightbit.samsprung.drawer.CoverStateAdapter
+import com.eightbit.samsprung.drawer.LastApps
 import com.eightbit.samsprung.drawer.LauncherManager
 import com.eightbit.samsprung.drawer.PanelWidgetManager
 import com.eightbit.samsprung.drawer.panels.*
@@ -796,20 +797,16 @@ class SamSprungOverlay : AppCompatActivity() {
         updateResumeButton(menuButton, color)
     }
 
-    /** Package and activity of the app that was open on the cover display when the screen went off. */
-    private fun lastApp(): Pair<String, String?>? {
-        if (!prefs.getBoolean(Preferences.prefResume, true)) return null
-        val saved = prefs.getString(Preferences.prefLastApp, "") ?: ""
-        if (saved.isEmpty()) return null
-        val pkg = saved.substringBefore('/')
-        val cls = saved.substringAfter('/', "").ifEmpty { null }
-        return pkg to cls
+    /** Apps that were open on the cover display when the screen went off, most recent first. */
+    private fun lastApps(): List<Pair<String, String?>> {
+        if (!prefs.getBoolean(Preferences.prefResume, true)) return emptyList()
+        return LastApps.list(prefs)
     }
 
     /** Places the fingerprint button next to the launcher button, with the same look. */
     private fun updateResumeButton(menuButton: FloatingActionButton, color: Int) {
         val resume = findViewById<FloatingActionButton>(R.id.resume_fab)
-        if (lastApp() == null) {
+        if (lastApps().isEmpty()) {
             resume.hide()
             return
         }
@@ -834,7 +831,7 @@ class SamSprungOverlay : AppCompatActivity() {
     }
 
     private fun showResumeButton() {
-        if (lastApp() != null) findViewById<FloatingActionButton>(R.id.resume_fab).show()
+        if (lastApps().isNotEmpty()) findViewById<FloatingActionButton>(R.id.resume_fab).show()
     }
 
     private fun hideResumeButton() {
@@ -843,8 +840,58 @@ class SamSprungOverlay : AppCompatActivity() {
 
     /** Opens again the app that was running when the screen went off (asks for the fingerprint if locked). */
     private fun resumeLastApp() {
-        val (pkg, cls) = lastApp() ?: return
+        val apps = lastApps()
+        if (apps.isEmpty()) return
         if (prefs.getBoolean(Preferences.prefReacts, true)) vibrator.vibrate(effectClick)
+        if (apps.size == 1) {
+            launchSaved(apps[0].first, apps[0].second)
+            return
+        }
+        // Several apps were open: let the user choose which one to resume
+        val builder = AlertDialog.Builder(this)
+        val list = LinearLayout(builder.context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(16.toPx, 8.toPx, 16.toPx, 8.toPx)
+        }
+        lateinit var dialog: AlertDialog
+        apps.forEach { (pkg, cls) ->
+            val label: CharSequence
+            val icon: Drawable?
+            try {
+                val info = packageManager.getApplicationInfo(pkg, 0)
+                label = packageManager.getApplicationLabel(info)
+                icon = packageManager.getApplicationIcon(info)
+            } catch (_: Exception) {
+                LastApps.remove(prefs, pkg)
+                return@forEach
+            }
+            val row = LinearLayout(builder.context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, 8.toPx, 0, 8.toPx)
+                addView(ImageView(builder.context).apply { setImageDrawable(icon) },
+                    LinearLayout.LayoutParams(40.toPx, 40.toPx))
+                addView(TextView(builder.context).apply {
+                    text = label
+                    textSize = 16f
+                    setPadding(16.toPx, 0, 0, 0)
+                })
+                setOnClickListener {
+                    dialog.dismiss()
+                    launchSaved(pkg, cls)
+                }
+            }
+            list.addView(row)
+        }
+        if (list.childCount == 0) {
+            hideResumeButton()
+            return
+        }
+        dialog = builder.setView(list).create()
+        dialog.show()
+    }
+
+    private fun launchSaved(pkg: String, cls: String?) {
         val launcher = launcherManager ?: return
         try {
             val activities = packageManager.queryIntentActivities(
@@ -859,8 +906,8 @@ class SamSprungOverlay : AppCompatActivity() {
                 launcher.launchApplicationInfo(packageManager.getApplicationInfo(pkg, 0))
             }
         } catch (_: Exception) {
-            prefs.edit().remove(Preferences.prefLastApp).apply()
-            hideResumeButton()
+            LastApps.remove(prefs, pkg)
+            if (lastApps().isEmpty()) hideResumeButton()
         }
     }
 

@@ -31,14 +31,6 @@ class OrientationManager(context: Context) {
         orientationView = SoftReference(orientationManager)
     }
 
-    /** Sends the requested orientation again to the system, if the layout is still on screen. */
-    fun reassertOrientation(orientation: Int) {
-        try {
-            orientationLayout.screenOrientation = orientation
-            windowManager.updateViewLayout(orientationManager, orientationLayout)
-        } catch (_: Exception) { }
-    }
-
     fun removeOrientationLayout() {
         try {
             orientationView?.let {

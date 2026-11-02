@@ -14,7 +14,6 @@
 
 package com.eightbit.samsprung.drawer
 
-import com.eightbit.samsprung.settings.SystemRotation
 import android.annotation.SuppressLint
 import android.app.*
 import android.content.*
@@ -111,7 +110,7 @@ class AppDisplayListener : Service() {
                 override fun onDisplayChanged(display: Int) {
                     if (display == 0 && getDisplay(0).state == Display.STATE_ON) {
                         // The phone was opened: the app goes to the main display, nothing to resume
-                        prefs.edit().remove(Preferences.prefLastApp).apply()
+                        LastApps.clear(prefs)
                         componentName?.let {
                             restoreActivityDisplay(it, display)
                         } ?: launchPackage?.let {
@@ -128,8 +127,8 @@ class AppDisplayListener : Service() {
             registerDisplayListener(mDisplayListener, null)
         }
 
-        // A new app is open now, so the one saved for resuming is no longer needed
-        prefs.edit().remove(Preferences.prefLastApp).apply()
+        // Every app opened on the cover display is remembered (the last three) for resuming
+        rememberLastApp(componentName, launchPackage, launchActivity)
         showForegroundNotification(startId)
 
         val displayContext = ScaledContext(ScaledContext(applicationContext).cover()).internal(1.5f)
@@ -209,8 +208,7 @@ class AppDisplayListener : Service() {
         component: ComponentName?, pkg: String?, activity: String?
     ) {
         val name = component?.packageName ?: pkg ?: return
-        val cls = component?.className ?: activity ?: ""
-        prefs.edit().putString(Preferences.prefLastApp, "$name/$cls").apply()
+        LastApps.add(prefs, name, component?.className ?: activity)
     }
 
     private fun restoreActivityDisplay(componentName: ComponentName?, display: Int) {
@@ -326,9 +324,8 @@ class AppDisplayListener : Service() {
     }
 
     fun onDismissOverlay() {
-        // Also when an app was opened with its own orientation, not only with the rotation lock
-        OrientationManager(this).removeOrientationLayout()
-        SystemRotation.restore(this)
+        if (prefs.getBoolean(Preferences.prefRotate, false))
+            OrientationManager(this).removeOrientationLayout()
         try {
             with (getSystemService(DISPLAY_SERVICE) as DisplayManager) {
                 unregisterDisplayListener(mDisplayListener)

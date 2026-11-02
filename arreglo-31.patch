@@ -1,0 +1,716 @@
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 541e998..d62a303 100755
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -8,7 +8,6 @@
+     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+         android:maxSdkVersion="32" />
+     <uses-permission android:name="android.permission.VIBRATE"/>
+-    <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
+     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+     <!-- Installed Apps -->
+     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+diff --git a/app/src/main/java/com/eightbit/samsprung/OnBroadcastService.kt b/app/src/main/java/com/eightbit/samsprung/OnBroadcastService.kt
+index 73c09f9..e66c9f6 100755
+--- a/app/src/main/java/com/eightbit/samsprung/OnBroadcastService.kt
++++ b/app/src/main/java/com/eightbit/samsprung/OnBroadcastService.kt
+@@ -14,7 +14,6 @@
+ 
+ package com.eightbit.samsprung
+ 
+-import com.eightbit.samsprung.settings.SystemRotation
+ import android.annotation.SuppressLint
+ import android.app.*
+ import android.content.BroadcastReceiver
+@@ -40,8 +39,10 @@ class OnBroadcastService : Service() {
+         override fun onReceive(context: Context, intent: Intent) {
+             if (Intent.ACTION_USER_PRESENT == intent.action
+                 || Intent.ACTION_SCREEN_ON == intent.action) {
+-                OrientationManager(context).removeOrientationLayout()
+-                SystemRotation.restore(context)
++                if (getSharedPreferences(Preferences.prefsValue, MODE_PRIVATE)
++                        .getBoolean(Preferences.prefRotate, false)) {
++                    OrientationManager(context).removeOrientationLayout()
++                }
+                 ScaledContext(context).cover().startActivity(
+                     Intent(context.applicationContext, SamSprungOverlay::class.java)
+                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+diff --git a/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt b/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt
+index 89d5de4..0804da7 100755
+--- a/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt
++++ b/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt
+@@ -70,6 +70,7 @@ import com.eightbit.io.Debug
+ import com.eightbit.material.IconifiedSnackbar
+ import com.eightbit.os.Version
+ import com.eightbit.samsprung.drawer.CoverStateAdapter
++import com.eightbit.samsprung.drawer.LastApps
+ import com.eightbit.samsprung.drawer.LauncherManager
+ import com.eightbit.samsprung.drawer.PanelWidgetManager
+ import com.eightbit.samsprung.drawer.panels.*
+@@ -796,20 +797,16 @@ class SamSprungOverlay : AppCompatActivity() {
+         updateResumeButton(menuButton, color)
+     }
+ 
+-    /** Package and activity of the app that was open on the cover display when the screen went off. */
+-    private fun lastApp(): Pair<String, String?>? {
+-        if (!prefs.getBoolean(Preferences.prefResume, true)) return null
+-        val saved = prefs.getString(Preferences.prefLastApp, "") ?: ""
+-        if (saved.isEmpty()) return null
+-        val pkg = saved.substringBefore('/')
+-        val cls = saved.substringAfter('/', "").ifEmpty { null }
+-        return pkg to cls
++    /** Apps that were open on the cover display when the screen went off, most recent first. */
++    private fun lastApps(): List<Pair<String, String?>> {
++        if (!prefs.getBoolean(Preferences.prefResume, true)) return emptyList()
++        return LastApps.list(prefs)
+     }
+ 
+     /** Places the fingerprint button next to the launcher button, with the same look. */
+     private fun updateResumeButton(menuButton: FloatingActionButton, color: Int) {
+         val resume = findViewById<FloatingActionButton>(R.id.resume_fab)
+-        if (lastApp() == null) {
++        if (lastApps().isEmpty()) {
+             resume.hide()
+             return
+         }
+@@ -834,7 +831,7 @@ class SamSprungOverlay : AppCompatActivity() {
+     }
+ 
+     private fun showResumeButton() {
+-        if (lastApp() != null) findViewById<FloatingActionButton>(R.id.resume_fab).show()
++        if (lastApps().isNotEmpty()) findViewById<FloatingActionButton>(R.id.resume_fab).show()
+     }
+ 
+     private fun hideResumeButton() {
+@@ -843,8 +840,58 @@ class SamSprungOverlay : AppCompatActivity() {
+ 
+     /** Opens again the app that was running when the screen went off (asks for the fingerprint if locked). */
+     private fun resumeLastApp() {
+-        val (pkg, cls) = lastApp() ?: return
++        val apps = lastApps()
++        if (apps.isEmpty()) return
+         if (prefs.getBoolean(Preferences.prefReacts, true)) vibrator.vibrate(effectClick)
++        if (apps.size == 1) {
++            launchSaved(apps[0].first, apps[0].second)
++            return
++        }
++        // Several apps were open: let the user choose which one to resume
++        val builder = AlertDialog.Builder(this)
++        val list = LinearLayout(builder.context).apply {
++            orientation = LinearLayout.VERTICAL
++            setPadding(16.toPx, 8.toPx, 16.toPx, 8.toPx)
++        }
++        lateinit var dialog: AlertDialog
++        apps.forEach { (pkg, cls) ->
++            val label: CharSequence
++            val icon: Drawable?
++            try {
++                val info = packageManager.getApplicationInfo(pkg, 0)
++                label = packageManager.getApplicationLabel(info)
++                icon = packageManager.getApplicationIcon(info)
++            } catch (_: Exception) {
++                LastApps.remove(prefs, pkg)
++                return@forEach
++            }
++            val row = LinearLayout(builder.context).apply {
++                orientation = LinearLayout.HORIZONTAL
++                gravity = Gravity.CENTER_VERTICAL
++                setPadding(0, 8.toPx, 0, 8.toPx)
++                addView(ImageView(builder.context).apply { setImageDrawable(icon) },
++                    LinearLayout.LayoutParams(40.toPx, 40.toPx))
++                addView(TextView(builder.context).apply {
++                    text = label
++                    textSize = 16f
++                    setPadding(16.toPx, 0, 0, 0)
++                })
++                setOnClickListener {
++                    dialog.dismiss()
++                    launchSaved(pkg, cls)
++                }
++            }
++            list.addView(row)
++        }
++        if (list.childCount == 0) {
++            hideResumeButton()
++            return
++        }
++        dialog = builder.setView(list).create()
++        dialog.show()
++    }
++
++    private fun launchSaved(pkg: String, cls: String?) {
+         val launcher = launcherManager ?: return
+         try {
+             val activities = packageManager.queryIntentActivities(
+@@ -859,8 +906,8 @@ class SamSprungOverlay : AppCompatActivity() {
+                 launcher.launchApplicationInfo(packageManager.getApplicationInfo(pkg, 0))
+             }
+         } catch (_: Exception) {
+-            prefs.edit().remove(Preferences.prefLastApp).apply()
+-            hideResumeButton()
++            LastApps.remove(prefs, pkg)
++            if (lastApps().isEmpty()) hideResumeButton()
+         }
+     }
+ 
+diff --git a/app/src/main/java/com/eightbit/samsprung/drawer/AppDisplayListener.kt b/app/src/main/java/com/eightbit/samsprung/drawer/AppDisplayListener.kt
+index 5f23af2..09d25a3 100755
+--- a/app/src/main/java/com/eightbit/samsprung/drawer/AppDisplayListener.kt
++++ b/app/src/main/java/com/eightbit/samsprung/drawer/AppDisplayListener.kt
+@@ -14,7 +14,6 @@
+ 
+ package com.eightbit.samsprung.drawer
+ 
+-import com.eightbit.samsprung.settings.SystemRotation
+ import android.annotation.SuppressLint
+ import android.app.*
+ import android.content.*
+@@ -111,7 +110,7 @@ class AppDisplayListener : Service() {
+                 override fun onDisplayChanged(display: Int) {
+                     if (display == 0 && getDisplay(0).state == Display.STATE_ON) {
+                         // The phone was opened: the app goes to the main display, nothing to resume
+-                        prefs.edit().remove(Preferences.prefLastApp).apply()
++                        LastApps.clear(prefs)
+                         componentName?.let {
+                             restoreActivityDisplay(it, display)
+                         } ?: launchPackage?.let {
+@@ -128,8 +127,8 @@ class AppDisplayListener : Service() {
+             registerDisplayListener(mDisplayListener, null)
+         }
+ 
+-        // A new app is open now, so the one saved for resuming is no longer needed
+-        prefs.edit().remove(Preferences.prefLastApp).apply()
++        // Every app opened on the cover display is remembered (the last three) for resuming
++        rememberLastApp(componentName, launchPackage, launchActivity)
+         showForegroundNotification(startId)
+ 
+         val displayContext = ScaledContext(ScaledContext(applicationContext).cover()).internal(1.5f)
+@@ -209,8 +208,7 @@ class AppDisplayListener : Service() {
+         component: ComponentName?, pkg: String?, activity: String?
+     ) {
+         val name = component?.packageName ?: pkg ?: return
+-        val cls = component?.className ?: activity ?: ""
+-        prefs.edit().putString(Preferences.prefLastApp, "$name/$cls").apply()
++        LastApps.add(prefs, name, component?.className ?: activity)
+     }
+ 
+     private fun restoreActivityDisplay(componentName: ComponentName?, display: Int) {
+@@ -326,9 +324,8 @@ class AppDisplayListener : Service() {
+     }
+ 
+     fun onDismissOverlay() {
+-        // Also when an app was opened with its own orientation, not only with the rotation lock
+-        OrientationManager(this).removeOrientationLayout()
+-        SystemRotation.restore(this)
++        if (prefs.getBoolean(Preferences.prefRotate, false))
++            OrientationManager(this).removeOrientationLayout()
+         try {
+             with (getSystemService(DISPLAY_SERVICE) as DisplayManager) {
+                 unregisterDisplayListener(mDisplayListener)
+diff --git a/app/src/main/java/com/eightbit/samsprung/drawer/LastApps.kt b/app/src/main/java/com/eightbit/samsprung/drawer/LastApps.kt
+new file mode 100644
+index 0000000..008b5fe
+--- /dev/null
++++ b/app/src/main/java/com/eightbit/samsprung/drawer/LastApps.kt
+@@ -0,0 +1,40 @@
++package com.eightbit.samsprung.drawer
++
++import android.content.SharedPreferences
++import com.eightbit.samsprung.settings.Preferences
++
++/**
++ * The last apps opened on the cover display (most recent first), kept so they can be
++ * resumed with the fingerprint button when the screen turns on again.
++ */
++object LastApps {
++    const val MAX = 3
++
++    fun list(prefs: SharedPreferences): List<Pair<String, String?>> {
++        val saved = prefs.getString(Preferences.prefLastApps, "") ?: ""
++        return saved.split('\n').filter { it.isNotEmpty() }.map {
++            it.substringBefore('/') to it.substringAfter('/', "").ifEmpty { null }
++        }
++    }
++
++    private fun save(prefs: SharedPreferences, apps: List<Pair<String, String?>>) {
++        prefs.edit().putString(
++            Preferences.prefLastApps,
++            apps.joinToString("\n") { "${it.first}/${it.second ?: ""}" }
++        ).apply()
++    }
++
++    fun add(prefs: SharedPreferences, pkg: String, cls: String?) {
++        val apps = list(prefs).filter { it.first != pkg }.toMutableList()
++        apps.add(0, pkg to cls)
++        save(prefs, apps.take(MAX))
++    }
++
++    fun remove(prefs: SharedPreferences, pkg: String) {
++        save(prefs, list(prefs).filter { it.first != pkg })
++    }
++
++    fun clear(prefs: SharedPreferences) {
++        prefs.edit().remove(Preferences.prefLastApps).apply()
++    }
++}
+diff --git a/app/src/main/java/com/eightbit/samsprung/drawer/LauncherManager.kt b/app/src/main/java/com/eightbit/samsprung/drawer/LauncherManager.kt
+index e5a99d0..c775fe0 100755
+--- a/app/src/main/java/com/eightbit/samsprung/drawer/LauncherManager.kt
++++ b/app/src/main/java/com/eightbit/samsprung/drawer/LauncherManager.kt
+@@ -1,6 +1,5 @@
+ package com.eightbit.samsprung.drawer
+ 
+-import com.eightbit.samsprung.settings.SystemRotation
+ import android.app.PendingIntent
+ import android.content.ComponentName
+ import android.content.Intent
+@@ -20,8 +19,6 @@ import com.eightbit.content.ScaledContext
+ import com.eightbit.io.Debug
+ import com.eightbit.samsprung.SamSprung
+ import com.eightbit.samsprung.SamSprungOverlay
+-import com.eightbit.samsprung.settings.AppOrientation
+-import com.eightbit.samsprung.speech.DictationLog
+ import com.eightbit.samsprung.settings.Preferences
+ 
+ class LauncherManager(private val overlay: SamSprungOverlay) {
+@@ -33,70 +30,19 @@ class LauncherManager(private val overlay: SamSprungOverlay) {
+     val prefs: SharedPreferences = overlay.getSharedPreferences(
+         Preferences.prefsValue, AppCompatActivity.MODE_PRIVATE)
+ 
+-    /** Orientation lock added before the app starts, when the app has its own orientation. */
+-    private var preLock: OrientationManager? = null
+-
+-    private fun forcedOrientation(mode: Int) = if (mode == AppOrientation.HORIZONTAL)
+-        ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+-
+-    /**
+-     * Apps with their own orientation (vertical / horizontal in the settings) are launched
+-     * already under that lock, so they start in the right orientation.
+-     */
+-    private fun lockBeforeLaunch(pkg: String?) {
+-        val mode = AppOrientation.get(prefs, pkg)
+-        preLock = null
+-        if (mode == AppOrientation.DEFAULT) {
+-            SystemRotation.restore(overlay)
+-            return
+-        }
+-        SystemRotation.force(overlay, mode)
+-        val lock = OrientationManager(overlay)
+-        try {
+-            lock.addOrientationLayout(forcedOrientation(mode))
+-            preLock = lock
+-            DictationLog.add(overlay, "orientación: $pkg modo=$mode bloqueo añadido antes de abrir")
+-        } catch (ex: Exception) {
+-            DictationLog.add(overlay, "orientación: ERROR ${ex.javaClass.simpleName}: ${ex.message}")
+-        }
+-    }
+-
+     private fun postOrientationHandler(extras: Bundle) {
+         val isOppoDevice = Debug.isOppoDevice
+-        // Orientation chosen for this app in the settings of the main display
+-        val pkg = extras.getString("launchPackage")
+-        val appMode = AppOrientation.get(prefs, pkg)
+-        var orientationLock = preLock
+-        preLock = null
+-        if (appMode != AppOrientation.DEFAULT) {
+-            if (orientationLock == null) {
+-                orientationLock = OrientationManager(overlay)
+-                try {
+-                    orientationLock.addOrientationLayout(forcedOrientation(appMode))
+-                    DictationLog.add(overlay, "orientación: $pkg modo=$appMode bloqueo añadido")
+-                } catch (ex: Exception) {
+-                    DictationLog.add(overlay, "orientación: ERROR ${ex.javaClass.simpleName}: ${ex.message}")
+-                }
+-            }
+-            // Ask again once the app is on screen, in case the first request was too early
+-            val lock = orientationLock
+-            Handler(Looper.getMainLooper()).postDelayed({
+-                lock.reassertOrientation(forcedOrientation(appMode))
+-            }, 700)
++        val orientationLock = OrientationManager(overlay)
++        if (isOppoDevice) {
++            if (prefs.getBoolean(Preferences.prefRotate, false))
++                orientationLock.addOrientationLayout(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)
+         } else {
+-            orientationLock = OrientationManager(overlay)
+-            if (isOppoDevice) {
+-                if (prefs.getBoolean(Preferences.prefRotate, false))
+-                    orientationLock.addOrientationLayout(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)
+-            } else {
+-                orientationLock.addOrientationLayout(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
+-            }
++            orientationLock.addOrientationLayout(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
+         }
+-        val lockForRemoval = orientationLock
+         Handler(Looper.getMainLooper()).postDelayed({
+             // All apps are launched in portrait to prevent crashes related to orientation
+-            if (appMode == AppOrientation.DEFAULT && !prefs.getBoolean(Preferences.prefRotate, false)) {
+-                if (!isOppoDevice) lockForRemoval.removeOrientationLayout()
++            if (!prefs.getBoolean(Preferences.prefRotate, false)) {
++                if (!isOppoDevice) orientationLock.removeOrientationLayout()
+                 overlay.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+             }
+             overlay.onStopOverlay()
+@@ -118,7 +64,6 @@ class LauncherManager(private val overlay: SamSprungOverlay) {
+                 overlay.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LOCKED
+                 overlay.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_BEHIND
+ 
+-                lockBeforeLaunch(resolveInfo.activityInfo.packageName)
+                 val intent = overlay.packageManager
+                     .getLaunchIntentForPackage(resolveInfo.activityInfo.packageName)
+                 launcher.startMainActivity(
+@@ -148,7 +93,6 @@ class LauncherManager(private val overlay: SamSprungOverlay) {
+                 overlay.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LOCKED
+                 overlay.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_BEHIND
+ 
+-                lockBeforeLaunch(appInfo.packageName)
+                 val intent = overlay.packageManager.getLaunchIntentForPackage(appInfo.packageName)
+                 launcher.startMainActivity(
+                     intent?.component,
+diff --git a/app/src/main/java/com/eightbit/samsprung/drawer/OrientationManager.kt b/app/src/main/java/com/eightbit/samsprung/drawer/OrientationManager.kt
+index 137aa87..986c33e 100644
+--- a/app/src/main/java/com/eightbit/samsprung/drawer/OrientationManager.kt
++++ b/app/src/main/java/com/eightbit/samsprung/drawer/OrientationManager.kt
+@@ -31,14 +31,6 @@ class OrientationManager(context: Context) {
+         orientationView = SoftReference(orientationManager)
+     }
+ 
+-    /** Sends the requested orientation again to the system, if the layout is still on screen. */
+-    fun reassertOrientation(orientation: Int) {
+-        try {
+-            orientationLayout.screenOrientation = orientation
+-            windowManager.updateViewLayout(orientationManager, orientationLayout)
+-        } catch (_: Exception) { }
+-    }
+-
+     fun removeOrientationLayout() {
+         try {
+             orientationView?.let {
+diff --git a/app/src/main/java/com/eightbit/samsprung/settings/AppOrientation.kt b/app/src/main/java/com/eightbit/samsprung/settings/AppOrientation.kt
+deleted file mode 100644
+index 6b47a1c..0000000
+--- a/app/src/main/java/com/eightbit/samsprung/settings/AppOrientation.kt
++++ /dev/null
+@@ -1,31 +0,0 @@
+-package com.eightbit.samsprung.settings
+-
+-import android.content.SharedPreferences
+-import org.json.JSONObject
+-
+-/**
+- * Orientation chosen for each app when it is opened on the cover display.
+- * [DEFAULT] keeps the normal behavior (the rotation lock of the cover screen).
+- */
+-object AppOrientation {
+-    const val DEFAULT = 0
+-    const val VERTICAL = 1
+-    const val HORIZONTAL = 2
+-
+-    private const val KEY = "prefAppOrientation"
+-
+-    private fun read(prefs: SharedPreferences): JSONObject = try {
+-        JSONObject(prefs.getString(KEY, "{}") ?: "{}")
+-    } catch (_: Exception) { JSONObject() }
+-
+-    fun get(prefs: SharedPreferences, packageName: String?): Int {
+-        if (packageName == null) return DEFAULT
+-        return read(prefs).optInt(packageName, DEFAULT)
+-    }
+-
+-    fun set(prefs: SharedPreferences, packageName: String, mode: Int) {
+-        val all = read(prefs)
+-        if (mode == DEFAULT) all.remove(packageName) else all.put(packageName, mode)
+-        prefs.edit().putString(KEY, all.toString()).apply()
+-    }
+-}
+diff --git a/app/src/main/java/com/eightbit/samsprung/settings/FilteredAppsAdapter.kt b/app/src/main/java/com/eightbit/samsprung/settings/FilteredAppsAdapter.kt
+index 53ef105..55802d2 100755
+--- a/app/src/main/java/com/eightbit/samsprung/settings/FilteredAppsAdapter.kt
++++ b/app/src/main/java/com/eightbit/samsprung/settings/FilteredAppsAdapter.kt
+@@ -21,7 +21,6 @@ import android.content.pm.ResolveInfo
+ import android.view.LayoutInflater
+ import android.view.View
+ import android.view.ViewGroup
+-import android.widget.CheckBox
+ import android.widget.LinearLayout
+ import android.widget.Switch
+ import android.widget.TextView
+@@ -120,31 +119,8 @@ class FilteredAppsAdapter(
+             @SuppressLint("UseSwitchCompatOrMaterialCode")
+             val hideSwitch = detailView.findViewById<Switch>(R.id.hiddenItemSwitch)
+             hideSwitch.isChecked = !hide.contains(application.activityInfo.packageName)
+-            // Apps that are not shown in the drawer are dimmed
+-            detailView.alpha = if (hideSwitch.isChecked) 1f else 0.4f
+-
+-            val packageId = application.activityInfo.packageName
+-            val boxes = listOf<CheckBox>(
+-                detailView.findViewById(R.id.orientDefault),
+-                detailView.findViewById(R.id.orientVertical),
+-                detailView.findViewById(R.id.orientHorizontal)
+-            )
+-            fun showMode(mode: Int) {
+-                boxes.forEachIndexed { index, box -> box.isChecked = index == mode }
+-            }
+-            showMode(AppOrientation.get(prefs, packageId))
+-            boxes.forEachIndexed { index, box ->
+-                // Exactly one option is always selected
+-                box.setOnClickListener {
+-                    AppOrientation.set(prefs, packageId, index)
+-                    showMode(index)
+-                    if (index != AppOrientation.DEFAULT && !SystemRotation.canWrite(box.context))
+-                        SystemRotation.requestPermission(box.context)
+-                }
+-            }
+ 
+             hideSwitch.setOnClickListener {
+-                detailView.alpha = if (hideSwitch.isChecked) 1f else 0.4f
+                 val packageName = application.activityInfo.packageName
+                 if (hide.contains(packageName)) {
+                     hide.remove(packageName)
+diff --git a/app/src/main/java/com/eightbit/samsprung/settings/Preferences.kt b/app/src/main/java/com/eightbit/samsprung/settings/Preferences.kt
+index 913df18..98e1b7d 100644
+--- a/app/src/main/java/com/eightbit/samsprung/settings/Preferences.kt
++++ b/app/src/main/java/com/eightbit/samsprung/settings/Preferences.kt
+@@ -26,4 +26,5 @@ object Preferences {
+     const val prefIconPack: String = "prefIconPack"
+     const val prefResume: String = "prefResume"
+     const val prefLastApp: String = "prefLastApp"
++    const val prefLastApps: String = "prefLastApps"
+ }
+\ No newline at end of file
+diff --git a/app/src/main/java/com/eightbit/samsprung/settings/SystemRotation.kt b/app/src/main/java/com/eightbit/samsprung/settings/SystemRotation.kt
+deleted file mode 100644
+index 1ee7b2b..0000000
+--- a/app/src/main/java/com/eightbit/samsprung/settings/SystemRotation.kt
++++ /dev/null
+@@ -1,77 +0,0 @@
+-package com.eightbit.samsprung.settings
+-
+-import android.content.Context
+-import android.content.Intent
+-import android.net.Uri
+-import android.os.SystemClock
+-import android.provider.Settings
+-import com.eightbit.samsprung.speech.DictationLog
+-
+-/**
+- * Forces the screen rotation through the system settings ("Modify system settings"
+- * permission) while an app with its own orientation is open, and restores it afterwards.
+- */
+-object SystemRotation {
+-    private const val SAVED = "rotationSaved"
+-    private const val SAVED_AUTO = "rotationSavedAuto"
+-    private const val SAVED_USER = "rotationSavedUser"
+-    private const val GRACE_MS = 5000L
+-
+-    // Closing the previous app's service right after a launch must not undo the rotation
+-    @Volatile private var forcedAt = 0L
+-
+-    fun canWrite(context: Context) = Settings.System.canWrite(context)
+-
+-    fun requestPermission(context: Context) {
+-        try {
+-            context.startActivity(
+-                Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:${context.packageName}"))
+-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+-            )
+-        } catch (_: Exception) { }
+-    }
+-
+-    /** [mode] is AppOrientation.VERTICAL or HORIZONTAL. */
+-    fun force(context: Context, mode: Int) {
+-        val prefs = context.getSharedPreferences(Preferences.prefsValue, Context.MODE_PRIVATE)
+-        if (!canWrite(context)) {
+-            DictationLog.add(context, "rotación: falta el permiso de modificar ajustes del sistema")
+-            return
+-        }
+-        try {
+-            val resolver = context.contentResolver
+-            if (!prefs.getBoolean(SAVED, false)) {
+-                prefs.edit()
+-                    .putBoolean(SAVED, true)
+-                    .putInt(SAVED_AUTO, Settings.System.getInt(resolver, Settings.System.ACCELEROMETER_ROTATION, 1))
+-                    .putInt(SAVED_USER, Settings.System.getInt(resolver, Settings.System.USER_ROTATION, 0))
+-                    .apply()
+-            }
+-            forcedAt = SystemClock.elapsedRealtime()
+-            val rotation = if (mode == AppOrientation.HORIZONTAL) 1 else 0
+-            Settings.System.putInt(resolver, Settings.System.ACCELEROMETER_ROTATION, 0)
+-            Settings.System.putInt(resolver, Settings.System.USER_ROTATION, rotation)
+-            DictationLog.add(context, "rotación: ajustes del sistema user_rotation=$rotation")
+-        } catch (ex: Exception) {
+-            DictationLog.add(context, "rotación: ERROR ${ex.javaClass.simpleName}: ${ex.message}")
+-        }
+-    }
+-
+-    fun restore(context: Context) {
+-        val prefs = context.getSharedPreferences(Preferences.prefsValue, Context.MODE_PRIVATE)
+-        if (!prefs.getBoolean(SAVED, false)) return
+-        if (SystemClock.elapsedRealtime() - forcedAt < GRACE_MS) {
+-            DictationLog.add(context, "rotación: restauración ignorada (recién fijada)")
+-            return
+-        }
+-        try {
+-            if (canWrite(context)) {
+-                val resolver = context.contentResolver
+-                Settings.System.putInt(resolver, Settings.System.USER_ROTATION, prefs.getInt(SAVED_USER, 0))
+-                Settings.System.putInt(resolver, Settings.System.ACCELEROMETER_ROTATION, prefs.getInt(SAVED_AUTO, 1))
+-                DictationLog.add(context, "rotación: ajustes restaurados")
+-            }
+-        } catch (_: Exception) { }
+-        prefs.edit().putBoolean(SAVED, false).apply()
+-    }
+-}
+diff --git a/app/src/main/res/layout/filtered_apps_item.xml b/app/src/main/res/layout/filtered_apps_item.xml
+index 5eec4ed..dd3703c 100755
+--- a/app/src/main/res/layout/filtered_apps_item.xml
++++ b/app/src/main/res/layout/filtered_apps_item.xml
+@@ -8,60 +8,34 @@
+     android:paddingStart="2dp"
+     android:paddingEnd="4dp"
+     android:layout_gravity="center"
+-    android:gravity="center_vertical"
+     android:orientation="horizontal"
+     tools:ignore="UseCompoundDrawables">
+ 
+-    <androidx.appcompat.widget.AppCompatImageView
+-        android:id="@+id/hiddenItemImage"
+-        android:layout_width="40dp"
+-        android:layout_height="40dp"
+-        android:layout_marginStart="2dp"
+-        android:layout_gravity="center"
+-        android:contentDescription="@string/description_icon" />
++        <androidx.appcompat.widget.AppCompatImageView
++            android:id="@+id/hiddenItemImage"
++            android:layout_width="48dp"
++            android:layout_height="48dp"
++            android:layout_marginStart="4dp"
++            android:layout_gravity="center"
++            android:contentDescription="@string/description_icon" />
+ 
+-    <TextView
+-        android:id="@+id/hiddenItemText"
+-        android:layout_width="0dp"
+-        android:layout_weight="1"
+-        android:paddingStart="6dp"
+-        android:paddingEnd="0dp"
+-        android:textSize="16sp"
+-        android:maxLines="2"
+-        android:ellipsize="end"
+-        android:textColor="?android:textColorPrimary"
+-        android:layout_gravity="center"
+-        android:gravity="center_vertical"
+-        android:layout_height="wrap_content" />
++        <TextView
++            android:id="@+id/hiddenItemText"
++            android:layout_width="0dp"
++            android:layout_weight="1"
++            android:paddingStart="8dp"
++            android:paddingEnd="0dp"
++            android:textSize="24sp"
++            android:textColor="?android:textColorPrimary"
++            android:layout_gravity="center"
++            android:gravity="center"
++            android:layout_height="wrap_content" />
+ 
+     <Switch
+         android:id="@+id/hiddenItemSwitch"
+-        android:layout_width="52dp"
++        android:layout_width="56dp"
+         android:layout_height="48dp"
+-        android:layout_gravity="center_vertical"
++        android:layout_marginEnd="4dp"
++        android:layout_gravity="end|center_vertical"
+         tools:ignore="UseSwitchCompatOrMaterialXml" />
+-
+-    <androidx.appcompat.widget.AppCompatCheckBox
+-        android:id="@+id/orientDefault"
+-        android:layout_width="44dp"
+-        android:layout_height="48dp"
+-        android:gravity="center"
+-        android:button="@null"
+-        android:drawableEnd="?android:attr/listChoiceIndicatorMultiple" />
+-
+-    <androidx.appcompat.widget.AppCompatCheckBox
+-        android:id="@+id/orientVertical"
+-        android:layout_width="44dp"
+-        android:layout_height="48dp"
+-        android:gravity="center"
+-        android:button="@null"
+-        android:drawableEnd="?android:attr/listChoiceIndicatorMultiple" />
+-
+-    <androidx.appcompat.widget.AppCompatCheckBox
+-        android:id="@+id/orientHorizontal"
+-        android:layout_width="44dp"
+-        android:layout_height="48dp"
+-        android:gravity="center"
+-        android:button="@null"
+-        android:drawableEnd="?android:attr/listChoiceIndicatorMultiple" />
+-</LinearLayout>
++</LinearLayout>
+\ No newline at end of file
+diff --git a/app/src/main/res/layout/preferences_layout.xml b/app/src/main/res/layout/preferences_layout.xml
+index a639382..fab3cd2 100755
+--- a/app/src/main/res/layout/preferences_layout.xml
++++ b/app/src/main/res/layout/preferences_layout.xml
+@@ -463,60 +463,6 @@
+                     </LinearLayout>
+                 </LinearLayout>
+ 
+-                <LinearLayout
+-                    android:layout_width="match_parent"
+-                    android:layout_height="wrap_content"
+-                    android:orientation="horizontal"
+-                    android:paddingStart="6dp"
+-                    android:paddingEnd="8dp"
+-                    android:gravity="center_vertical">
+-
+-                    <TextView
+-                        android:layout_width="0dp"
+-                        android:layout_height="wrap_content"
+-                        android:layout_weight="1"
+-                        android:textSize="12sp"
+-                        android:textStyle="bold"
+-                        android:textColor="?android:textColorSecondary"
+-                        android:text="@string/orientation_header_apps" />
+-
+-                    <TextView
+-                        android:layout_width="52dp"
+-                        android:layout_height="wrap_content"
+-                        android:gravity="center"
+-                        android:textSize="11sp"
+-                        android:textStyle="bold"
+-                        android:textColor="?android:textColorSecondary"
+-                        android:text="@string/orientation_header_visible" />
+-
+-                    <TextView
+-                        android:layout_width="44dp"
+-                        android:layout_height="wrap_content"
+-                        android:gravity="center"
+-                        android:textSize="11sp"
+-                        android:textStyle="bold"
+-                        android:textColor="?android:textColorSecondary"
+-                        android:text="@string/orientation_header_default" />
+-
+-                    <TextView
+-                        android:layout_width="44dp"
+-                        android:layout_height="wrap_content"
+-                        android:gravity="center"
+-                        android:textSize="11sp"
+-                        android:textStyle="bold"
+-                        android:textColor="?android:textColorSecondary"
+-                        android:text="@string/orientation_header_vertical" />
+-
+-                    <TextView
+-                        android:layout_width="44dp"
+-                        android:layout_height="wrap_content"
+-                        android:gravity="center"
+-                        android:textSize="11sp"
+-                        android:textStyle="bold"
+-                        android:textColor="?android:textColorSecondary"
+-                        android:text="@string/orientation_header_horizontal" />
+-                </LinearLayout>
+-
+                 <androidx.recyclerview.widget.RecyclerView
+                     android:id="@+id/app_toggle_list"
+                     android:layout_width="match_parent"
