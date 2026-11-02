@@ -1,0 +1,85 @@
+diff --git a/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt b/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt
+index 0804da7..f932c0d 100755
+--- a/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt
++++ b/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt
+@@ -34,6 +34,7 @@ import android.graphics.ImageDecoder
+ import android.graphics.PixelFormat
+ import android.graphics.drawable.AnimatedImageDrawable
+ import android.graphics.drawable.ColorDrawable
++import android.content.pm.ResolveInfo
+ import android.graphics.drawable.Drawable
+ import android.hardware.camera2.CameraManager
+ import android.media.AudioManager
+@@ -70,6 +71,7 @@ import com.eightbit.io.Debug
+ import com.eightbit.material.IconifiedSnackbar
+ import com.eightbit.os.Version
+ import com.eightbit.samsprung.drawer.CoverStateAdapter
++import com.eightbit.samsprung.drawer.IconPacks
+ import com.eightbit.samsprung.drawer.LastApps
+ import com.eightbit.samsprung.drawer.LauncherManager
+ import com.eightbit.samsprung.drawer.PanelWidgetManager
+@@ -851,7 +853,7 @@ class SamSprungOverlay : AppCompatActivity() {
+         val builder = AlertDialog.Builder(this)
+         val list = LinearLayout(builder.context).apply {
+             orientation = LinearLayout.VERTICAL
+-            setPadding(16.toPx, 8.toPx, 16.toPx, 8.toPx)
++            setPadding(12.toPx, 4.toPx, 12.toPx, 4.toPx)
+         }
+         lateinit var dialog: AlertDialog
+         apps.forEach { (pkg, cls) ->
+@@ -860,7 +862,12 @@ class SamSprungOverlay : AppCompatActivity() {
+             try {
+                 val info = packageManager.getApplicationInfo(pkg, 0)
+                 label = packageManager.getApplicationLabel(info)
+-                icon = packageManager.getApplicationIcon(info)
++                // Same icons as the app drawer (icon pack chosen in the settings)
++                val pack = prefs.getString(Preferences.prefIconPack, "") ?: ""
++                val match = resolveSaved(pkg, cls)
++                icon = (if (pack.isEmpty() || match == null) null else try {
++                    IconPacks.themedIcon(packageManager, prefs, pack, match)
++                } catch (_: Exception) { null }) ?: packageManager.getApplicationIcon(info)
+             } catch (_: Exception) {
+                 LastApps.remove(prefs, pkg)
+                 return@forEach
+@@ -868,13 +875,13 @@ class SamSprungOverlay : AppCompatActivity() {
+             val row = LinearLayout(builder.context).apply {
+                 orientation = LinearLayout.HORIZONTAL
+                 gravity = Gravity.CENTER_VERTICAL
+-                setPadding(0, 8.toPx, 0, 8.toPx)
++                setPadding(0, 4.toPx, 0, 4.toPx)
+                 addView(ImageView(builder.context).apply { setImageDrawable(icon) },
+-                    LinearLayout.LayoutParams(40.toPx, 40.toPx))
++                    LinearLayout.LayoutParams(28.toPx, 28.toPx))
+                 addView(TextView(builder.context).apply {
+                     text = label
+-                    textSize = 16f
+-                    setPadding(16.toPx, 0, 0, 0)
++                    textSize = 14f
++                    setPadding(12.toPx, 0, 0, 0)
+                 })
+                 setOnClickListener {
+                     dialog.dismiss()
+@@ -891,14 +898,18 @@ class SamSprungOverlay : AppCompatActivity() {
+         dialog.show()
+     }
+ 
++    private fun resolveSaved(pkg: String, cls: String?): ResolveInfo? {
++        val activities = packageManager.queryIntentActivities(
++            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(pkg), 0
++        )
++        return activities.firstOrNull { cls != null && it.activityInfo.name == cls }
++            ?: activities.firstOrNull()
++    }
++
+     private fun launchSaved(pkg: String, cls: String?) {
+         val launcher = launcherManager ?: return
+         try {
+-            val activities = packageManager.queryIntentActivities(
+-                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(pkg), 0
+-            )
+-            val match = activities.firstOrNull { cls != null && it.activityInfo.name == cls }
+-                ?: activities.firstOrNull()
++            val match = resolveSaved(pkg, cls)
+             if (match != null) {
+                 launcher.launchResolveInfo(match)
+             } else {
