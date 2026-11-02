@@ -138,6 +138,8 @@ class FilteredAppsAdapter(
                 box.setOnClickListener {
                     AppOrientation.set(prefs, packageId, index)
                     showMode(index)
+                    if (index != AppOrientation.DEFAULT && !SystemRotation.canWrite(box.context))
+                        SystemRotation.requestPermission(box.context)
                 }
             }
 

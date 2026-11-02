@@ -14,6 +14,7 @@
 
 package com.eightbit.samsprung.drawer
 
+import com.eightbit.samsprung.settings.SystemRotation
 import android.annotation.SuppressLint
 import android.app.*
 import android.content.*
@@ -327,6 +328,7 @@ class AppDisplayListener : Service() {
     fun onDismissOverlay() {
         // Also when an app was opened with its own orientation, not only with the rotation lock
         OrientationManager(this).removeOrientationLayout()
+        SystemRotation.restore(this)
         try {
             with (getSystemService(DISPLAY_SERVICE) as DisplayManager) {
                 unregisterDisplayListener(mDisplayListener)

@@ -1,5 +1,6 @@
 package com.eightbit.samsprung.drawer
 
+import com.eightbit.samsprung.settings.SystemRotation
 import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Intent
@@ -45,7 +46,11 @@ class LauncherManager(private val overlay: SamSprungOverlay) {
     private fun lockBeforeLaunch(pkg: String?) {
         val mode = AppOrientation.get(prefs, pkg)
         preLock = null
-        if (mode == AppOrientation.DEFAULT) return
+        if (mode == AppOrientation.DEFAULT) {
+            SystemRotation.restore(overlay)
+            return
+        }
+        SystemRotation.force(overlay, mode)
         val lock = OrientationManager(overlay)
         try {
             lock.addOrientationLayout(forcedOrientation(mode))

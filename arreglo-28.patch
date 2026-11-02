@@ -1,0 +1,162 @@
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index d62a303..541e998 100755
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -8,6 +8,7 @@
+     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+         android:maxSdkVersion="32" />
+     <uses-permission android:name="android.permission.VIBRATE"/>
++    <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
+     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+     <!-- Installed Apps -->
+     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+diff --git a/app/src/main/java/com/eightbit/samsprung/OnBroadcastService.kt b/app/src/main/java/com/eightbit/samsprung/OnBroadcastService.kt
+index 4561a9f..73c09f9 100755
+--- a/app/src/main/java/com/eightbit/samsprung/OnBroadcastService.kt
++++ b/app/src/main/java/com/eightbit/samsprung/OnBroadcastService.kt
+@@ -14,6 +14,7 @@
+ 
+ package com.eightbit.samsprung
+ 
++import com.eightbit.samsprung.settings.SystemRotation
+ import android.annotation.SuppressLint
+ import android.app.*
+ import android.content.BroadcastReceiver
+@@ -40,6 +41,7 @@ class OnBroadcastService : Service() {
+             if (Intent.ACTION_USER_PRESENT == intent.action
+                 || Intent.ACTION_SCREEN_ON == intent.action) {
+                 OrientationManager(context).removeOrientationLayout()
++                SystemRotation.restore(context)
+                 ScaledContext(context).cover().startActivity(
+                     Intent(context.applicationContext, SamSprungOverlay::class.java)
+                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+diff --git a/app/src/main/java/com/eightbit/samsprung/drawer/AppDisplayListener.kt b/app/src/main/java/com/eightbit/samsprung/drawer/AppDisplayListener.kt
+index ab50a92..5f23af2 100755
+--- a/app/src/main/java/com/eightbit/samsprung/drawer/AppDisplayListener.kt
++++ b/app/src/main/java/com/eightbit/samsprung/drawer/AppDisplayListener.kt
+@@ -14,6 +14,7 @@
+ 
+ package com.eightbit.samsprung.drawer
+ 
++import com.eightbit.samsprung.settings.SystemRotation
+ import android.annotation.SuppressLint
+ import android.app.*
+ import android.content.*
+@@ -327,6 +328,7 @@ class AppDisplayListener : Service() {
+     fun onDismissOverlay() {
+         // Also when an app was opened with its own orientation, not only with the rotation lock
+         OrientationManager(this).removeOrientationLayout()
++        SystemRotation.restore(this)
+         try {
+             with (getSystemService(DISPLAY_SERVICE) as DisplayManager) {
+                 unregisterDisplayListener(mDisplayListener)
+diff --git a/app/src/main/java/com/eightbit/samsprung/drawer/LauncherManager.kt b/app/src/main/java/com/eightbit/samsprung/drawer/LauncherManager.kt
+index 7a973e5..e5a99d0 100755
+--- a/app/src/main/java/com/eightbit/samsprung/drawer/LauncherManager.kt
++++ b/app/src/main/java/com/eightbit/samsprung/drawer/LauncherManager.kt
+@@ -1,5 +1,6 @@
+ package com.eightbit.samsprung.drawer
+ 
++import com.eightbit.samsprung.settings.SystemRotation
+ import android.app.PendingIntent
+ import android.content.ComponentName
+ import android.content.Intent
+@@ -45,7 +46,11 @@ class LauncherManager(private val overlay: SamSprungOverlay) {
+     private fun lockBeforeLaunch(pkg: String?) {
+         val mode = AppOrientation.get(prefs, pkg)
+         preLock = null
+-        if (mode == AppOrientation.DEFAULT) return
++        if (mode == AppOrientation.DEFAULT) {
++            SystemRotation.restore(overlay)
++            return
++        }
++        SystemRotation.force(overlay, mode)
+         val lock = OrientationManager(overlay)
+         try {
+             lock.addOrientationLayout(forcedOrientation(mode))
+diff --git a/app/src/main/java/com/eightbit/samsprung/settings/FilteredAppsAdapter.kt b/app/src/main/java/com/eightbit/samsprung/settings/FilteredAppsAdapter.kt
+index 5d01e1b..53ef105 100755
+--- a/app/src/main/java/com/eightbit/samsprung/settings/FilteredAppsAdapter.kt
++++ b/app/src/main/java/com/eightbit/samsprung/settings/FilteredAppsAdapter.kt
+@@ -138,6 +138,8 @@ class FilteredAppsAdapter(
+                 box.setOnClickListener {
+                     AppOrientation.set(prefs, packageId, index)
+                     showMode(index)
++                    if (index != AppOrientation.DEFAULT && !SystemRotation.canWrite(box.context))
++                        SystemRotation.requestPermission(box.context)
+                 }
+             }
+ 
+diff --git a/app/src/main/java/com/eightbit/samsprung/settings/SystemRotation.kt b/app/src/main/java/com/eightbit/samsprung/settings/SystemRotation.kt
+new file mode 100644
+index 0000000..131b3fd
+--- /dev/null
++++ b/app/src/main/java/com/eightbit/samsprung/settings/SystemRotation.kt
+@@ -0,0 +1,67 @@
++package com.eightbit.samsprung.settings
++
++import android.content.Context
++import android.content.Intent
++import android.net.Uri
++import android.provider.Settings
++import com.eightbit.samsprung.speech.DictationLog
++
++/**
++ * Forces the screen rotation through the system settings ("Modify system settings"
++ * permission) while an app with its own orientation is open, and restores it afterwards.
++ */
++object SystemRotation {
++    private const val SAVED = "rotationSaved"
++    private const val SAVED_AUTO = "rotationSavedAuto"
++    private const val SAVED_USER = "rotationSavedUser"
++
++    fun canWrite(context: Context) = Settings.System.canWrite(context)
++
++    fun requestPermission(context: Context) {
++        try {
++            context.startActivity(
++                Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:${context.packageName}"))
++                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
++            )
++        } catch (_: Exception) { }
++    }
++
++    /** [mode] is AppOrientation.VERTICAL or HORIZONTAL. */
++    fun force(context: Context, mode: Int) {
++        val prefs = context.getSharedPreferences(Preferences.prefsValue, Context.MODE_PRIVATE)
++        if (!canWrite(context)) {
++            DictationLog.add(context, "rotación: falta el permiso de modificar ajustes del sistema")
++            return
++        }
++        try {
++            val resolver = context.contentResolver
++            if (!prefs.getBoolean(SAVED, false)) {
++                prefs.edit()
++                    .putBoolean(SAVED, true)
++                    .putInt(SAVED_AUTO, Settings.System.getInt(resolver, Settings.System.ACCELEROMETER_ROTATION, 1))
++                    .putInt(SAVED_USER, Settings.System.getInt(resolver, Settings.System.USER_ROTATION, 0))
++                    .apply()
++            }
++            val rotation = if (mode == AppOrientation.HORIZONTAL) 1 else 0
++            Settings.System.putInt(resolver, Settings.System.ACCELEROMETER_ROTATION, 0)
++            Settings.System.putInt(resolver, Settings.System.USER_ROTATION, rotation)
++            DictationLog.add(context, "rotación: ajustes del sistema user_rotation=$rotation")
++        } catch (ex: Exception) {
++            DictationLog.add(context, "rotación: ERROR ${ex.javaClass.simpleName}: ${ex.message}")
++        }
++    }
++
++    fun restore(context: Context) {
++        val prefs = context.getSharedPreferences(Preferences.prefsValue, Context.MODE_PRIVATE)
++        if (!prefs.getBoolean(SAVED, false)) return
++        try {
++            if (canWrite(context)) {
++                val resolver = context.contentResolver
++                Settings.System.putInt(resolver, Settings.System.USER_ROTATION, prefs.getInt(SAVED_USER, 0))
++                Settings.System.putInt(resolver, Settings.System.ACCELEROMETER_ROTATION, prefs.getInt(SAVED_AUTO, 1))
++                DictationLog.add(context, "rotación: ajustes restaurados")
++            }
++        } catch (_: Exception) { }
++        prefs.edit().putBoolean(SAVED, false).apply()
++    }
++}

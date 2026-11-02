@@ -14,6 +14,7 @@
 
 package com.eightbit.samsprung
 
+import com.eightbit.samsprung.settings.SystemRotation
 import android.annotation.SuppressLint
 import android.app.*
 import android.content.BroadcastReceiver
@@ -40,6 +41,7 @@ class OnBroadcastService : Service() {
             if (Intent.ACTION_USER_PRESENT == intent.action
                 || Intent.ACTION_SCREEN_ON == intent.action) {
                 OrientationManager(context).removeOrientationLayout()
+                SystemRotation.restore(context)
                 ScaledContext(context).cover().startActivity(
                     Intent(context.applicationContext, SamSprungOverlay::class.java)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
