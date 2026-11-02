@@ -674,6 +674,7 @@ class SamSprungOverlay : AppCompatActivity() {
                             handler.removeCallbacksAndMessages(null)
                             fakeOverlay.visibility = View.GONE
                             menuButton.hide()
+                            hideResumeButton()
                             coordinator.visibility = View.VISIBLE
                             val index = prefs.getInt(Preferences.prefViewer, viewPager.currentItem)
                             viewPager.setCurrentItem(if (index < 2) 1 else index, false)
@@ -684,6 +685,7 @@ class SamSprungOverlay : AppCompatActivity() {
         }
         setScreenTimeout(findViewById(R.id.bottom_sheet_main))
         showBottomHandle(bottomHandle, menuButton)
+        findViewById<FloatingActionButton>(R.id.resume_fab).setOnClickListener { resumeLastApp() }
 
         findViewById<AnimatedLinearLayout>(R.id.update_notice).isGone = true
 
@@ -791,6 +793,75 @@ class SamSprungOverlay : AppCompatActivity() {
         setMenuButtonGravity(menuButton)
         menuButton.drawable.mutate().setTint(color)
         menuButton.alpha = prefs.getFloat(Preferences.prefAlphas, 1f)
+        updateResumeButton(menuButton, color)
+    }
+
+    /** Package and activity of the app that was open on the cover display when the screen went off. */
+    private fun lastApp(): Pair<String, String?>? {
+        if (!prefs.getBoolean(Preferences.prefResume, true)) return null
+        val saved = prefs.getString(Preferences.prefLastApp, "") ?: ""
+        if (saved.isEmpty()) return null
+        val pkg = saved.substringBefore('/')
+        val cls = saved.substringAfter('/', "").ifEmpty { null }
+        return pkg to cls
+    }
+
+    /** Places the fingerprint button next to the launcher button, with the same look. */
+    private fun updateResumeButton(menuButton: FloatingActionButton, color: Int) {
+        val resume = findViewById<FloatingActionButton>(R.id.resume_fab)
+        if (lastApp() == null) {
+            resume.hide()
+            return
+        }
+        resume.size = menuButton.size
+        val large = prefs.getBoolean(Preferences.prefTapper, false)
+        resume.setMaxImageSize((if (large) 36 else 28).toPx)
+        resume.drawable.mutate().setTint(color)
+        resume.alpha = prefs.getFloat(Preferences.prefAlphas, 1f)
+        val menuParams = menuButton.layoutParams as CoordinatorLayout.LayoutParams
+        val params = resume.layoutParams as CoordinatorLayout.LayoutParams
+        params.anchorGravity = menuParams.anchorGravity
+        val offset = (if (large) 66 else 50).toPx
+        if (prefs.getInt(Preferences.prefShifts, 2) == 0) {
+            // Launcher button at the start: the fingerprint goes after it
+            params.marginStart = menuParams.marginStart + offset
+            params.marginEnd = menuParams.marginEnd
+        } else {
+            params.marginStart = menuParams.marginStart
+            params.marginEnd = menuParams.marginEnd + offset
+        }
+        resume.layoutParams = params
+    }
+
+    private fun showResumeButton() {
+        if (lastApp() != null) findViewById<FloatingActionButton>(R.id.resume_fab).show()
+    }
+
+    private fun hideResumeButton() {
+        findViewById<FloatingActionButton>(R.id.resume_fab).hide()
+    }
+
+    /** Opens again the app that was running when the screen went off (asks for the fingerprint if locked). */
+    private fun resumeLastApp() {
+        val (pkg, cls) = lastApp() ?: return
+        if (prefs.getBoolean(Preferences.prefReacts, true)) vibrator.vibrate(effectClick)
+        val launcher = launcherManager ?: return
+        try {
+            val activities = packageManager.queryIntentActivities(
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(pkg), 0
+            )
+            val match = activities.firstOrNull { cls != null && it.activityInfo.name == cls }
+                ?: activities.firstOrNull()
+            if (match != null) {
+                launcher.launchResolveInfo(match)
+            } else {
+                @Suppress("DEPRECATION")
+                launcher.launchApplicationInfo(packageManager.getApplicationInfo(pkg, 0))
+            }
+        } catch (_: Exception) {
+            prefs.edit().remove(Preferences.prefLastApp).apply()
+            hideResumeButton()
+        }
     }
 
     private fun setKeyguardStatus(keyguardManager: KeyguardManager, button: AppCompatImageView) {
@@ -1214,10 +1285,12 @@ class SamSprungOverlay : AppCompatActivity() {
         val fakeOverlay = findViewById<LinearLayout>(R.id.fake_overlay)
         val menuButton = findViewById<FloatingActionButton>(R.id.menu_fab)
         menuButton.show()
+        showResumeButton()
         fakeOverlay.visibility = View.VISIBLE
         fabShowHandler.postDelayed({
             fakeOverlay.visibility = View.INVISIBLE
             menuButton.hide()
+            hideResumeButton()
         }, 3300)
     }
 

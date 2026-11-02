@@ -173,4 +173,6 @@
     <string name="orientation_header_default">Default</string>
     <string name="orientation_header_vertical">Vertical</string>
     <string name="orientation_header_horizontal">Horizontal</string>
+    <string name="options_resume">Resume the last app with the fingerprint button</string>
+    <string name="resume_app">Resume last app</string>
 </resources>

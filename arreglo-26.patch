@@ -1,0 +1,286 @@
+diff --git a/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt b/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt
+index 58cd558..89d5de4 100755
+--- a/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt
++++ b/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt
+@@ -674,6 +674,7 @@ class SamSprungOverlay : AppCompatActivity() {
+                             handler.removeCallbacksAndMessages(null)
+                             fakeOverlay.visibility = View.GONE
+                             menuButton.hide()
++                            hideResumeButton()
+                             coordinator.visibility = View.VISIBLE
+                             val index = prefs.getInt(Preferences.prefViewer, viewPager.currentItem)
+                             viewPager.setCurrentItem(if (index < 2) 1 else index, false)
+@@ -684,6 +685,7 @@ class SamSprungOverlay : AppCompatActivity() {
+         }
+         setScreenTimeout(findViewById(R.id.bottom_sheet_main))
+         showBottomHandle(bottomHandle, menuButton)
++        findViewById<FloatingActionButton>(R.id.resume_fab).setOnClickListener { resumeLastApp() }
+ 
+         findViewById<AnimatedLinearLayout>(R.id.update_notice).isGone = true
+ 
+@@ -791,6 +793,75 @@ class SamSprungOverlay : AppCompatActivity() {
+         setMenuButtonGravity(menuButton)
+         menuButton.drawable.mutate().setTint(color)
+         menuButton.alpha = prefs.getFloat(Preferences.prefAlphas, 1f)
++        updateResumeButton(menuButton, color)
++    }
++
++    /** Package and activity of the app that was open on the cover display when the screen went off. */
++    private fun lastApp(): Pair<String, String?>? {
++        if (!prefs.getBoolean(Preferences.prefResume, true)) return null
++        val saved = prefs.getString(Preferences.prefLastApp, "") ?: ""
++        if (saved.isEmpty()) return null
++        val pkg = saved.substringBefore('/')
++        val cls = saved.substringAfter('/', "").ifEmpty { null }
++        return pkg to cls
++    }
++
++    /** Places the fingerprint button next to the launcher button, with the same look. */
++    private fun updateResumeButton(menuButton: FloatingActionButton, color: Int) {
++        val resume = findViewById<FloatingActionButton>(R.id.resume_fab)
++        if (lastApp() == null) {
++            resume.hide()
++            return
++        }
++        resume.size = menuButton.size
++        val large = prefs.getBoolean(Preferences.prefTapper, false)
++        resume.setMaxImageSize((if (large) 36 else 28).toPx)
++        resume.drawable.mutate().setTint(color)
++        resume.alpha = prefs.getFloat(Preferences.prefAlphas, 1f)
++        val menuParams = menuButton.layoutParams as CoordinatorLayout.LayoutParams
++        val params = resume.layoutParams as CoordinatorLayout.LayoutParams
++        params.anchorGravity = menuParams.anchorGravity
++        val offset = (if (large) 66 else 50).toPx
++        if (prefs.getInt(Preferences.prefShifts, 2) == 0) {
++            // Launcher button at the start: the fingerprint goes after it
++            params.marginStart = menuParams.marginStart + offset
++            params.marginEnd = menuParams.marginEnd
++        } else {
++            params.marginStart = menuParams.marginStart
++            params.marginEnd = menuParams.marginEnd + offset
++        }
++        resume.layoutParams = params
++    }
++
++    private fun showResumeButton() {
++        if (lastApp() != null) findViewById<FloatingActionButton>(R.id.resume_fab).show()
++    }
++
++    private fun hideResumeButton() {
++        findViewById<FloatingActionButton>(R.id.resume_fab).hide()
++    }
++
++    /** Opens again the app that was running when the screen went off (asks for the fingerprint if locked). */
++    private fun resumeLastApp() {
++        val (pkg, cls) = lastApp() ?: return
++        if (prefs.getBoolean(Preferences.prefReacts, true)) vibrator.vibrate(effectClick)
++        val launcher = launcherManager ?: return
++        try {
++            val activities = packageManager.queryIntentActivities(
++                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(pkg), 0
++            )
++            val match = activities.firstOrNull { cls != null && it.activityInfo.name == cls }
++                ?: activities.firstOrNull()
++            if (match != null) {
++                launcher.launchResolveInfo(match)
++            } else {
++                @Suppress("DEPRECATION")
++                launcher.launchApplicationInfo(packageManager.getApplicationInfo(pkg, 0))
++            }
++        } catch (_: Exception) {
++            prefs.edit().remove(Preferences.prefLastApp).apply()
++            hideResumeButton()
++        }
+     }
+ 
+     private fun setKeyguardStatus(keyguardManager: KeyguardManager, button: AppCompatImageView) {
+@@ -1214,10 +1285,12 @@ class SamSprungOverlay : AppCompatActivity() {
+         val fakeOverlay = findViewById<LinearLayout>(R.id.fake_overlay)
+         val menuButton = findViewById<FloatingActionButton>(R.id.menu_fab)
+         menuButton.show()
++        showResumeButton()
+         fakeOverlay.visibility = View.VISIBLE
+         fabShowHandler.postDelayed({
+             fakeOverlay.visibility = View.INVISIBLE
+             menuButton.hide()
++            hideResumeButton()
+         }, 3300)
+     }
+ 
+diff --git a/app/src/main/java/com/eightbit/samsprung/drawer/AppDisplayListener.kt b/app/src/main/java/com/eightbit/samsprung/drawer/AppDisplayListener.kt
+index 439c988..ab50a92 100755
+--- a/app/src/main/java/com/eightbit/samsprung/drawer/AppDisplayListener.kt
++++ b/app/src/main/java/com/eightbit/samsprung/drawer/AppDisplayListener.kt
+@@ -83,6 +83,7 @@ class AppDisplayListener : Service() {
+         offReceiver = object : BroadcastReceiver() {
+             override fun onReceive(context: Context?, intent: Intent) {
+                 if (intent.action == Intent.ACTION_SCREEN_OFF) {
++                    rememberLastApp(componentName, launchPackage, launchActivity)
+                     componentName?.let {
+                         restoreActivityDisplay(it, 0)
+                     } ?: launchPackage?.let {
+@@ -108,6 +109,8 @@ class AppDisplayListener : Service() {
+                 override fun onDisplayAdded(display: Int) {}
+                 override fun onDisplayChanged(display: Int) {
+                     if (display == 0 && getDisplay(0).state == Display.STATE_ON) {
++                        // The phone was opened: the app goes to the main display, nothing to resume
++                        prefs.edit().remove(Preferences.prefLastApp).apply()
+                         componentName?.let {
+                             restoreActivityDisplay(it, display)
+                         } ?: launchPackage?.let {
+@@ -124,6 +127,8 @@ class AppDisplayListener : Service() {
+             registerDisplayListener(mDisplayListener, null)
+         }
+ 
++        // A new app is open now, so the one saved for resuming is no longer needed
++        prefs.edit().remove(Preferences.prefLastApp).apply()
+         showForegroundNotification(startId)
+ 
+         val displayContext = ScaledContext(ScaledContext(applicationContext).cover()).internal(1.5f)
+@@ -198,6 +203,15 @@ class AppDisplayListener : Service() {
+         return START_NOT_STICKY
+     }
+ 
++    /** Saves the app open on the cover display so it can be resumed when the screen turns on again. */
++    private fun rememberLastApp(
++        component: ComponentName?, pkg: String?, activity: String?
++    ) {
++        val name = component?.packageName ?: pkg ?: return
++        val cls = component?.className ?: activity ?: ""
++        prefs.edit().putString(Preferences.prefLastApp, "$name/$cls").apply()
++    }
++
+     private fun restoreActivityDisplay(componentName: ComponentName?, display: Int) {
+         ScaledContext(applicationContext).restore(display).run {
+             with (getSystemService(LAUNCHER_APPS_SERVICE) as LauncherApps) {
+diff --git a/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt b/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt
+index 4022f12..dfb557d 100755
+--- a/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt
++++ b/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt
+@@ -664,6 +664,18 @@ class CoverPreferences : AppCompatActivity() {
+             fabSize.isChecked = !fabSize.isChecked
+         }
+ 
++        val resume = findViewById<AppCompatCheckBox>(R.id.resume_switch)
++        resume.isChecked = prefs.getBoolean(Preferences.prefResume, true)
++        resume.setOnCheckedChangeListener { _, isChecked ->
++            with(prefs.edit()) {
++                putBoolean(Preferences.prefResume, isChecked)
++                apply()
++            }
++        }
++        findViewById<LinearLayout>(R.id.resume_row).setOnClickListener {
++            resume.isChecked = !resume.isChecked
++        }
++
+         val dictation = findViewById<AppCompatCheckBox>(R.id.dictation_switch)
+         dictation.isChecked = prefs.getBoolean(Preferences.prefDictation, false)
+         dictation.setOnCheckedChangeListener { _, isChecked ->
+diff --git a/app/src/main/java/com/eightbit/samsprung/settings/Preferences.kt b/app/src/main/java/com/eightbit/samsprung/settings/Preferences.kt
+index 840dda8..913df18 100644
+--- a/app/src/main/java/com/eightbit/samsprung/settings/Preferences.kt
++++ b/app/src/main/java/com/eightbit/samsprung/settings/Preferences.kt
+@@ -24,4 +24,6 @@ object Preferences {
+     const val prefZoom: String = "prefZoom"
+     const val prefDictation: String = "prefDictation"
+     const val prefIconPack: String = "prefIconPack"
++    const val prefResume: String = "prefResume"
++    const val prefLastApp: String = "prefLastApp"
+ }
+\ No newline at end of file
+diff --git a/app/src/main/res/layout/home_main_view.xml b/app/src/main/res/layout/home_main_view.xml
+index 65bb0c8..faa72b8 100755
+--- a/app/src/main/res/layout/home_main_view.xml
++++ b/app/src/main/res/layout/home_main_view.xml
+@@ -248,4 +248,24 @@
+         android:layout_marginEnd="5dp"
+         android:contentDescription="@string/description_badge"
+         app:useCompatPadding="false" />
++
++    <com.google.android.material.floatingactionbutton.FloatingActionButton
++        android:id="@+id/resume_fab"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:focusable="false"
++        android:outlineProvider="none"
++        android:visibility="gone"
++        app:srcCompat="@drawable/ic_fingerprint_24dp"
++        app:backgroundTint="@android:color/transparent"
++        app:borderWidth="0dp"
++        app:fabSize="mini"
++        app:maxImageSize="28dp"
++        app:layout_anchor="@+id/bottom_handle"
++        app:layout_anchorGravity="top|end"
++        app:layout_dodgeInsetEdges="bottom"
++        android:layout_marginStart="5dp"
++        android:layout_marginEnd="55dp"
++        android:contentDescription="@string/resume_app"
++        app:useCompatPadding="false" />
+ </androidx.coordinatorlayout.widget.CoordinatorLayout>
+\ No newline at end of file
+diff --git a/app/src/main/res/layout/prefs_general.xml b/app/src/main/res/layout/prefs_general.xml
+index 5e9d61a..ccea9fa 100755
+--- a/app/src/main/res/layout/prefs_general.xml
++++ b/app/src/main/res/layout/prefs_general.xml
+@@ -124,6 +124,37 @@
+             android:drawableEnd="?android:attr/listChoiceIndicatorMultiple" />
+     </LinearLayout>
+ 
++    <LinearLayout
++        android:id="@+id/resume_row"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:orientation="horizontal"
++        android:layout_marginStart="16dp"
++        android:layout_marginEnd="8dp"
++        android:gravity="center_vertical"
++        android:layout_gravity="center_vertical"
++        tools:ignore="UseCompoundDrawables">
++
++        <TextView
++            android:layout_width="0dp"
++            android:layout_weight="3"
++            android:textSize="24sp"
++            android:textColor="?android:textColorPrimary"
++            android:gravity="center_vertical"
++            android:layout_height="wrap_content"
++            android:text="@string/options_resume" />
++
++        <androidx.appcompat.widget.AppCompatCheckBox
++            android:id="@+id/resume_switch"
++            android:layout_width="0dp"
++            android:gravity="center"
++            android:layout_gravity="end|center_vertical"
++            android:layout_weight="1"
++            android:layout_height="wrap_content"
++            android:button="@null"
++            android:drawableEnd="?android:attr/listChoiceIndicatorMultiple" />
++    </LinearLayout>
++
+     <LinearLayout
+         android:id="@+id/theme"
+         android:layout_width="match_parent"
+diff --git a/app/src/main/res/values-es/strings.xml b/app/src/main/res/values-es/strings.xml
+index 7f34f34..e6557de 100644
+--- a/app/src/main/res/values-es/strings.xml
++++ b/app/src/main/res/values-es/strings.xml
+@@ -173,4 +173,6 @@
+     <string name="orientation_header_default">Predet.</string>
+     <string name="orientation_header_vertical">Vertical</string>
+     <string name="orientation_header_horizontal">Horiz.</string>
++    <string name="options_resume">Reanudar la última app con el botón de huella</string>
++    <string name="resume_app">Reanudar última app</string>
+ </resources>
+\ No newline at end of file
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index c4ef0eb..93b2c0c 100755
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -173,4 +173,6 @@
+     <string name="orientation_header_default">Default</string>
+     <string name="orientation_header_vertical">Vertical</string>
+     <string name="orientation_header_horizontal">Horizontal</string>
++    <string name="options_resume">Resume the last app with the fingerprint button</string>
++    <string name="resume_app">Resume last app</string>
+ </resources>
+\ No newline at end of file

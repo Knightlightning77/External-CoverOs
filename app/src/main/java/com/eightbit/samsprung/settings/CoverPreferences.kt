@@ -664,6 +664,18 @@ class CoverPreferences : AppCompatActivity() {
             fabSize.isChecked = !fabSize.isChecked
         }
 
+        val resume = findViewById<AppCompatCheckBox>(R.id.resume_switch)
+        resume.isChecked = prefs.getBoolean(Preferences.prefResume, true)
+        resume.setOnCheckedChangeListener { _, isChecked ->
+            with(prefs.edit()) {
+                putBoolean(Preferences.prefResume, isChecked)
+                apply()
+            }
+        }
+        findViewById<LinearLayout>(R.id.resume_row).setOnClickListener {
+            resume.isChecked = !resume.isChecked
+        }
+
         val dictation = findViewById<AppCompatCheckBox>(R.id.dictation_switch)
         dictation.isChecked = prefs.getBoolean(Preferences.prefDictation, false)
         dictation.setOnCheckedChangeListener { _, isChecked ->

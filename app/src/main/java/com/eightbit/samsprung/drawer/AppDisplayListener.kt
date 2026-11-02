@@ -83,6 +83,7 @@ class AppDisplayListener : Service() {
         offReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent) {
                 if (intent.action == Intent.ACTION_SCREEN_OFF) {
+                    rememberLastApp(componentName, launchPackage, launchActivity)
                     componentName?.let {
                         restoreActivityDisplay(it, 0)
                     } ?: launchPackage?.let {
@@ -108,6 +109,8 @@ class AppDisplayListener : Service() {
                 override fun onDisplayAdded(display: Int) {}
                 override fun onDisplayChanged(display: Int) {
                     if (display == 0 && getDisplay(0).state == Display.STATE_ON) {
+                        // The phone was opened: the app goes to the main display, nothing to resume
+                        prefs.edit().remove(Preferences.prefLastApp).apply()
                         componentName?.let {
                             restoreActivityDisplay(it, display)
                         } ?: launchPackage?.let {
@@ -124,6 +127,8 @@ class AppDisplayListener : Service() {
             registerDisplayListener(mDisplayListener, null)
         }
 
+        // A new app is open now, so the one saved for resuming is no longer needed
+        prefs.edit().remove(Preferences.prefLastApp).apply()
         showForegroundNotification(startId)
 
         val displayContext = ScaledContext(ScaledContext(applicationContext).cover()).internal(1.5f)
@@ -196,6 +201,15 @@ class AppDisplayListener : Service() {
             bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
         }, 500)
         return START_NOT_STICKY
+    }
+
+    /** Saves the app open on the cover display so it can be resumed when the screen turns on again. */
+    private fun rememberLastApp(
+        component: ComponentName?, pkg: String?, activity: String?
+    ) {
+        val name = component?.packageName ?: pkg ?: return
+        val cls = component?.className ?: activity ?: ""
+        prefs.edit().putString(Preferences.prefLastApp, "$name/$cls").apply()
     }
 
     private fun restoreActivityDisplay(componentName: ComponentName?, display: Int) {

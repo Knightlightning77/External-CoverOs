@@ -248,4 +248,24 @@
         android:layout_marginEnd="5dp"
         android:contentDescription="@string/description_badge"
         app:useCompatPadding="false" />
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/resume_fab"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:focusable="false"
+        android:outlineProvider="none"
+        android:visibility="gone"
+        app:srcCompat="@drawable/ic_fingerprint_24dp"
+        app:backgroundTint="@android:color/transparent"
+        app:borderWidth="0dp"
+        app:fabSize="mini"
+        app:maxImageSize="28dp"
+        app:layout_anchor="@+id/bottom_handle"
+        app:layout_anchorGravity="top|end"
+        app:layout_dodgeInsetEdges="bottom"
+        android:layout_marginStart="5dp"
+        android:layout_marginEnd="55dp"
+        android:contentDescription="@string/resume_app"
+        app:useCompatPadding="false" />
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
