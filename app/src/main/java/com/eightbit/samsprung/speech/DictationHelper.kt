@@ -149,6 +149,7 @@ class DictationHelper(
         const val ERROR_AI_QUOTA = -11
         const val ERROR_AI_NETWORK = -12
         const val ERROR_AI_FAILED = -13
+        const val ERROR_AI_BUSY = -14
 
         /** Message to show the user for an error code, or null if it is not worth showing. */
         @StringRes
@@ -160,6 +161,7 @@ class DictationHelper(
             ERROR_AI_QUOTA -> R.string.ai_quota_error
             ERROR_AI_NETWORK -> R.string.ai_network_error
             ERROR_AI_FAILED -> R.string.ai_failed
+            ERROR_AI_BUSY -> R.string.ai_busy
             SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
                 R.string.voice_network_error
             else -> null

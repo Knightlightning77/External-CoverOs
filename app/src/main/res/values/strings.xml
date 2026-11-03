@@ -164,6 +164,7 @@
     <string name="ai_quota_error">The Gemini usage limit was reached. Try again later.</string>
     <string name="ai_network_error">Could not reach Gemini.</string>
     <string name="ai_failed">Gemini could not transcribe the audio.</string>
+    <string name="ai_busy">Gemini is saturated right now. Try again in a few seconds.</string>
     <string name="options_icon_pack">Icon pack</string>
     <string name="icon_pack_default">System icons</string>
     <string name="icon_pack_none">No icon packs are installed</string>

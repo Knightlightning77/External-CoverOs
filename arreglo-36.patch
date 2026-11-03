@@ -1,0 +1,125 @@
+diff --git a/app/src/main/java/com/eightbit/samsprung/speech/AiDictation.kt b/app/src/main/java/com/eightbit/samsprung/speech/AiDictation.kt
+index 0e45baf..b3a321f 100644
+--- a/app/src/main/java/com/eightbit/samsprung/speech/AiDictation.kt
++++ b/app/src/main/java/com/eightbit/samsprung/speech/AiDictation.kt
+@@ -38,7 +38,7 @@ class AiDictation(
+ 
+     @Volatile private var recording = false
+     private var usingFallback = false
+-    private var generation = 0
++    @Volatile private var generation = 0
+ 
+     /** True while the audio is sent to Gemini and the answer has not arrived. */
+     var isProcessing = false
+@@ -162,7 +162,7 @@ class AiDictation(
+             var text: String? = null
+             var error = 0
+             try {
+-                text = requestText(pcm)
++                text = requestText(pcm) { gen != generation }
+             } catch (ex: ApiException) {
+                 error = ex.code
+                 DictationLog.add(context, "IA: ERROR ${ex.status} ${ex.message}")
+@@ -195,8 +195,30 @@ class AiDictation(
+ 
+     private class ApiException(val code: Int, val status: Int, message: String) : Exception(message)
+ 
+-    private fun requestText(pcm: ByteArray): String {
++    /**
++     * Gemini is sometimes saturated (503). The request is repeated a few times and, if the model
++     * is still busy, the lighter model is tried too.
++     */
++    private fun requestText(pcm: ByteArray, cancelled: () -> Boolean): String {
+         val audio = Base64.encodeToString(wav(pcm), Base64.NO_WRAP)
++        val main = AiSettings.model(context)
++        var last: ApiException? = null
++        for (attempt in 0 until ATTEMPTS) {
++            val model = if (attempt < ATTEMPTS / 2) main else FALLBACK_MODEL
++            try {
++                return callGemini(model, audio)
++            } catch (ex: ApiException) {
++                if (ex.status !in RETRY_STATUS) throw ex
++                last = ex
++                DictationLog.add(context, "IA: $model ocupado (${ex.status}), reintento ${attempt + 1}")
++                Thread.sleep(1500L * (attempt + 1))
++                if (cancelled()) throw ex
++            }
++        }
++        throw last ?: ApiException(DictationHelper.ERROR_AI_FAILED, 0, "sin respuesta")
++    }
++
++    private fun callGemini(model: String, audio: String): String {
+         val body = JSONObject()
+             .put("contents", JSONArray().put(JSONObject().put("parts", JSONArray()
+                 .put(JSONObject().put("text", prompt()))
+@@ -208,7 +230,7 @@ class AiDictation(
+             .toString().toByteArray(Charsets.UTF_8)
+ 
+         val url = URL("https://generativelanguage.googleapis.com/v1beta/models/" +
+-                "${AiSettings.model(context)}:generateContent")
++                "$model:generateContent")
+         val connection = url.openConnection() as HttpURLConnection
+         try {
+             connection.requestMethod = "POST"
+@@ -227,6 +249,7 @@ class AiDictation(
+                 val code = when (status) {
+                     400, 401, 403 -> DictationHelper.ERROR_AI_KEY
+                     429 -> DictationHelper.ERROR_AI_QUOTA
++                    in RETRY_STATUS -> DictationHelper.ERROR_AI_BUSY
+                     else -> DictationHelper.ERROR_AI_FAILED
+                 }
+                 val detail = try {
+@@ -300,5 +323,9 @@ class AiDictation(
+         /** Five minutes of audio, well under the size limit of the request. */
+         private const val MAX_BYTES = 5 * 60 * 32000
+         private const val NO_VOICE = "[SIN_VOZ]"
++        /** Lighter alias of Gemini, used when the main model is saturated. */
++        private const val FALLBACK_MODEL = "gemini-flash-lite-latest"
++        private const val ATTEMPTS = 4
++        private val RETRY_STATUS = setOf(429, 500, 502, 503, 504)
+     }
+ }
+diff --git a/app/src/main/java/com/eightbit/samsprung/speech/DictationHelper.kt b/app/src/main/java/com/eightbit/samsprung/speech/DictationHelper.kt
+index ef8ab3f..61c6302 100644
+--- a/app/src/main/java/com/eightbit/samsprung/speech/DictationHelper.kt
++++ b/app/src/main/java/com/eightbit/samsprung/speech/DictationHelper.kt
+@@ -149,6 +149,7 @@ class DictationHelper(
+         const val ERROR_AI_QUOTA = -11
+         const val ERROR_AI_NETWORK = -12
+         const val ERROR_AI_FAILED = -13
++        const val ERROR_AI_BUSY = -14
+ 
+         /** Message to show the user for an error code, or null if it is not worth showing. */
+         @StringRes
+@@ -160,6 +161,7 @@ class DictationHelper(
+             ERROR_AI_QUOTA -> R.string.ai_quota_error
+             ERROR_AI_NETWORK -> R.string.ai_network_error
+             ERROR_AI_FAILED -> R.string.ai_failed
++            ERROR_AI_BUSY -> R.string.ai_busy
+             SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
+                 R.string.voice_network_error
+             else -> null
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index 383da9e..18642e5 100755
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -164,6 +164,7 @@
+     <string name="ai_quota_error">The Gemini usage limit was reached. Try again later.</string>
+     <string name="ai_network_error">Could not reach Gemini.</string>
+     <string name="ai_failed">Gemini could not transcribe the audio.</string>
++    <string name="ai_busy">Gemini is saturated right now. Try again in a few seconds.</string>
+     <string name="options_icon_pack">Icon pack</string>
+     <string name="icon_pack_default">System icons</string>
+     <string name="icon_pack_none">No icon packs are installed</string>
+diff --git a/app/src/main/res/values-es/strings.xml b/app/src/main/res/values-es/strings.xml
+index 13aae7f..c172ad7 100644
+--- a/app/src/main/res/values-es/strings.xml
++++ b/app/src/main/res/values-es/strings.xml
+@@ -164,6 +164,7 @@
+     <string name="ai_quota_error">Se superó el límite de uso de Gemini. Inténtalo más tarde.</string>
+     <string name="ai_network_error">No hay conexión con Gemini.</string>
+     <string name="ai_failed">Gemini no pudo transcribir el audio.</string>
++    <string name="ai_busy">Gemini está saturado en este momento. Inténtalo de nuevo en unos segundos.</string>
+     <string name="options_icon_pack">Paquete de iconos</string>
+     <string name="icon_pack_default">Iconos del sistema</string>
+     <string name="icon_pack_none">No hay paquetes de iconos instalados</string>
