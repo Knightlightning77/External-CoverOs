@@ -1,0 +1,183 @@
+diff --git a/app/src/main/java/com/eightbit/samsprung/speech/AiDictation.kt b/app/src/main/java/com/eightbit/samsprung/speech/AiDictation.kt
+index e93a3ac..b967263 100644
+--- a/app/src/main/java/com/eightbit/samsprung/speech/AiDictation.kt
++++ b/app/src/main/java/com/eightbit/samsprung/speech/AiDictation.kt
+@@ -43,6 +43,9 @@ class AiDictation(
+     private var usingFallback = false
+     @Volatile private var generation = 0
+ 
++    /** When false the normal recognizer of the system is always used, without AI. */
++    var useAi = true
++
+     /** True while the audio is sent to Gemini and the answer has not arrived. */
+     var isProcessing = false
+         private set
+@@ -54,6 +57,10 @@ class AiDictation(
+     fun start() {
+         if (isProcessing || recording) return
+         usingFallback = false
++        if (!useAi) {
++            useFallback()
++            return
++        }
+         if (AiSettings.apiKey(context).isEmpty()) {
+             DictationLog.add(context, "IA: sin clave de Gemini, dictado normal")
+             useFallback()
+diff --git a/app/src/main/java/com/eightbit/samsprung/speech/AiSettings.kt b/app/src/main/java/com/eightbit/samsprung/speech/AiSettings.kt
+index 34072a1..4d3a05e 100644
+--- a/app/src/main/java/com/eightbit/samsprung/speech/AiSettings.kt
++++ b/app/src/main/java/com/eightbit/samsprung/speech/AiSettings.kt
+@@ -10,6 +10,7 @@ object AiSettings {
+     private const val FILE = "ai_dictation"
+     private const val KEY = "geminiKey"
+     private const val MODEL = "geminiModel"
++    private const val AI_MODE = "aiMode"
+ 
+     /** Alias that always points to the current Flash model of Gemini. */
+     const val DEFAULT_MODEL = "gemini-flash-latest"
+@@ -25,6 +26,13 @@ object AiSettings {
+ 
+     fun savedModel(context: Context): String = prefs(context).getString(MODEL, "") ?: ""
+ 
++    /** Which microphone was used last: the one with AI (true, the default) or the normal one. */
++    fun aiMode(context: Context): Boolean = prefs(context).getBoolean(AI_MODE, true)
++
++    fun setAiMode(context: Context, on: Boolean) {
++        prefs(context).edit().putBoolean(AI_MODE, on).apply()
++    }
++
+     fun save(context: Context, key: String, model: String) {
+         prefs(context).edit().putString(KEY, key.trim()).putString(MODEL, model.trim()).apply()
+     }
+diff --git a/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt b/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
+index 020aa3c..d9bd41d 100644
+--- a/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
++++ b/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
+@@ -25,6 +25,7 @@ import android.widget.LinearLayout
+ import android.widget.Toast
+ import com.eightbit.content.ScaledContext
+ import com.eightbit.samsprung.R
++import kotlin.math.hypot
+ 
+ /**
+  * Floating microphone shown next to the focused text field of any app. It is drawn by the
+@@ -37,6 +38,13 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+ 
+     private val dictation = AiDictation(service, this)
+ 
++    /** Microphone with AI (lilac) or normal microphone (green). A swipe over the button changes it. */
++    private var aiMode = AiSettings.aiMode(service)
++
++    init {
++        dictation.useAi = aiMode
++    }
++
+     private var windowManager: WindowManager? = null
+     private var rootView: LinearLayout? = null
+     private var micView: ImageView? = null
+@@ -160,10 +168,30 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+             setImageResource(R.drawable.ic_mic_24dp)
+             imageTintList = ColorStateList.valueOf(Color.WHITE)
+             setPadding(pad, pad, pad, pad)
+-            background = circle(IDLE_COLOR)
++            background = circle(idleColor())
+             elevation = elevationPx
+-            contentDescription = service.getString(R.string.dictation_mic)
+-            setOnClickListener { onMicClicked() }
++            contentDescription = micDescription()
++            // A tap dictates, a swipe over the button changes between the two microphones
++            var downX = 0f
++            var downY = 0f
++            setOnTouchListener { v, event ->
++                when (event.actionMasked) {
++                    MotionEvent.ACTION_DOWN -> {
++                        downX = event.rawX
++                        downY = event.rawY
++                        v.isPressed = true
++                    }
++                    MotionEvent.ACTION_UP -> {
++                        v.isPressed = false
++                        if (hypot(event.rawX - downX, event.rawY - downY) > size * 0.4f)
++                            toggleMode()
++                        else
++                            onMicClicked()
++                    }
++                    MotionEvent.ACTION_CANCEL -> v.isPressed = false
++                }
++                true
++            }
+         }
+         val erase = ImageView(context).apply {
+             setImageResource(R.drawable.ic_backspace_24dp)
+@@ -213,6 +241,23 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+         setColor(color)
+     }
+ 
++    private fun idleColor() = if (aiMode) AI_COLOR else NORMAL_COLOR
++
++    private fun micDescription() = service.getString(
++        if (aiMode) R.string.dictation_mic_ai else R.string.dictation_mic
++    )
++
++    /** Swipe over the microphone: changes between the normal dictation and the one with AI. */
++    private fun toggleMode() {
++        if (dictation.isListening || dictation.isProcessing) dictation.destroy()
++        aiMode = !aiMode
++        dictation.useAi = aiMode
++        AiSettings.setAiMode(service, aiMode)
++        DictationLog.add(service, "micrófono: ${if (aiMode) "IA" else "normal"}")
++        micView?.background = circle(idleColor())
++        micView?.contentDescription = micDescription()
++    }
++
+     private fun onMicClicked() {
+         stopRepeat()
+         probing = false
+@@ -360,11 +405,11 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+     }
+ 
+     override fun onListening(active: Boolean) {
+-        micView?.background = circle(if (active) ACTIVE_COLOR else IDLE_COLOR)
++        micView?.background = circle(if (active) ACTIVE_COLOR else idleColor())
+     }
+ 
+     override fun onProcessing(active: Boolean) {
+-        micView?.background = circle(if (active) PROCESSING_COLOR else IDLE_COLOR)
++        micView?.background = circle(if (active) PROCESSING_COLOR else idleColor())
+     }
+ 
+     override fun onText(text: String, isFinal: Boolean) {
+@@ -378,7 +423,8 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+     }
+ 
+     companion object {
+-        private val IDLE_COLOR = Color.parseColor("#6A3DF0")
++        private val NORMAL_COLOR = Color.parseColor("#2E9E5B")
++        private val AI_COLOR = Color.parseColor("#9575E8")
+         private val ACTIVE_COLOR = Color.parseColor("#E53935")
+         private val ERASE_COLOR = Color.parseColor("#546E7A")
+         private val PROCESSING_COLOR = Color.parseColor("#F9A825")
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index 18642e5..8d7a1f5 100755
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -154,6 +154,7 @@
+     <string name="options_dictation">Dictation microphone in all apps</string>
+     <string name="dictation_enable_accessibility">Enable the accessibility service first to use the dictation microphone</string>
+     <string name="dictation_mic">Dictate</string>
++    <string name="dictation_mic_ai">Dictate with AI</string>
+     <string name="dictation_log_clear">Clear log</string>
+     <string name="dictation_erase">Delete last character</string>
+     <string name="options_dictation_ai">Dictation with AI (Gemini)</string>
+diff --git a/app/src/main/res/values-es/strings.xml b/app/src/main/res/values-es/strings.xml
+index c172ad7..d22a536 100644
+--- a/app/src/main/res/values-es/strings.xml
++++ b/app/src/main/res/values-es/strings.xml
+@@ -154,6 +154,7 @@
+     <string name="options_dictation">Micrófono de dictado en todas las apps</string>
+     <string name="dictation_enable_accessibility">Activa primero el servicio de accesibilidad para usar el micrófono de dictado</string>
+     <string name="dictation_mic">Dictar</string>
++    <string name="dictation_mic_ai">Dictar con IA</string>
+     <string name="dictation_log_clear">Borrar registro</string>
+     <string name="dictation_erase">Borrar último carácter</string>
+     <string name="options_dictation_ai">Dictado con IA (Gemini)</string>

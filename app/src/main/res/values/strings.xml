@@ -154,6 +154,7 @@
     <string name="options_dictation">Dictation microphone in all apps</string>
     <string name="dictation_enable_accessibility">Enable the accessibility service first to use the dictation microphone</string>
     <string name="dictation_mic">Dictate</string>
+    <string name="dictation_mic_ai">Dictate with AI</string>
     <string name="dictation_log_clear">Clear log</string>
     <string name="dictation_erase">Delete last character</string>
     <string name="options_dictation_ai">Dictation with AI (Gemini)</string>

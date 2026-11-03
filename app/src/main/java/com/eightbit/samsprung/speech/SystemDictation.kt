@@ -25,6 +25,7 @@ import android.widget.LinearLayout
 import android.widget.Toast
 import com.eightbit.content.ScaledContext
 import com.eightbit.samsprung.R
+import kotlin.math.hypot
 
 /**
  * Floating microphone shown next to the focused text field of any app. It is drawn by the
@@ -36,6 +37,13 @@ import com.eightbit.samsprung.R
 class SystemDictation(private val service: AccessibilityService) : DictationHelper.Listener {
 
     private val dictation = AiDictation(service, this)
+
+    /** Microphone with AI (lilac) or normal microphone (green). A swipe over the button changes it. */
+    private var aiMode = AiSettings.aiMode(service)
+
+    init {
+        dictation.useAi = aiMode
+    }
 
     private var windowManager: WindowManager? = null
     private var rootView: LinearLayout? = null
@@ -160,10 +168,30 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
             setImageResource(R.drawable.ic_mic_24dp)
             imageTintList = ColorStateList.valueOf(Color.WHITE)
             setPadding(pad, pad, pad, pad)
-            background = circle(IDLE_COLOR)
+            background = circle(idleColor())
             elevation = elevationPx
-            contentDescription = service.getString(R.string.dictation_mic)
-            setOnClickListener { onMicClicked() }
+            contentDescription = micDescription()
+            // A tap dictates, a swipe over the button changes between the two microphones
+            var downX = 0f
+            var downY = 0f
+            setOnTouchListener { v, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        downX = event.rawX
+                        downY = event.rawY
+                        v.isPressed = true
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        v.isPressed = false
+                        if (hypot(event.rawX - downX, event.rawY - downY) > size * 0.4f)
+                            toggleMode()
+                        else
+                            onMicClicked()
+                    }
+                    MotionEvent.ACTION_CANCEL -> v.isPressed = false
+                }
+                true
+            }
         }
         val erase = ImageView(context).apply {
             setImageResource(R.drawable.ic_backspace_24dp)
@@ -211,6 +239,23 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
     private fun circle(color: Int) = GradientDrawable().apply {
         shape = GradientDrawable.OVAL
         setColor(color)
+    }
+
+    private fun idleColor() = if (aiMode) AI_COLOR else NORMAL_COLOR
+
+    private fun micDescription() = service.getString(
+        if (aiMode) R.string.dictation_mic_ai else R.string.dictation_mic
+    )
+
+    /** Swipe over the microphone: changes between the normal dictation and the one with AI. */
+    private fun toggleMode() {
+        if (dictation.isListening || dictation.isProcessing) dictation.destroy()
+        aiMode = !aiMode
+        dictation.useAi = aiMode
+        AiSettings.setAiMode(service, aiMode)
+        DictationLog.add(service, "micrófono: ${if (aiMode) "IA" else "normal"}")
+        micView?.background = circle(idleColor())
+        micView?.contentDescription = micDescription()
     }
 
     private fun onMicClicked() {
@@ -360,11 +405,11 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
     }
 
     override fun onListening(active: Boolean) {
-        micView?.background = circle(if (active) ACTIVE_COLOR else IDLE_COLOR)
+        micView?.background = circle(if (active) ACTIVE_COLOR else idleColor())
     }
 
     override fun onProcessing(active: Boolean) {
-        micView?.background = circle(if (active) PROCESSING_COLOR else IDLE_COLOR)
+        micView?.background = circle(if (active) PROCESSING_COLOR else idleColor())
     }
 
     override fun onText(text: String, isFinal: Boolean) {
@@ -378,7 +423,8 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
     }
 
     companion object {
-        private val IDLE_COLOR = Color.parseColor("#6A3DF0")
+        private val NORMAL_COLOR = Color.parseColor("#2E9E5B")
+        private val AI_COLOR = Color.parseColor("#9575E8")
         private val ACTIVE_COLOR = Color.parseColor("#E53935")
         private val ERASE_COLOR = Color.parseColor("#546E7A")
         private val PROCESSING_COLOR = Color.parseColor("#F9A825")

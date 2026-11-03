@@ -43,6 +43,9 @@ class AiDictation(
     private var usingFallback = false
     @Volatile private var generation = 0
 
+    /** When false the normal recognizer of the system is always used, without AI. */
+    var useAi = true
+
     /** True while the audio is sent to Gemini and the answer has not arrived. */
     var isProcessing = false
         private set
@@ -54,6 +57,10 @@ class AiDictation(
     fun start() {
         if (isProcessing || recording) return
         usingFallback = false
+        if (!useAi) {
+            useFallback()
+            return
+        }
         if (AiSettings.apiKey(context).isEmpty()) {
             DictationLog.add(context, "IA: sin clave de Gemini, dictado normal")
             useFallback()
