@@ -1,0 +1,113 @@
+diff --git a/app/src/main/java/com/eightbit/samsprung/speech/AiDictation.kt b/app/src/main/java/com/eightbit/samsprung/speech/AiDictation.kt
+index b3a321f..e93a3ac 100644
+--- a/app/src/main/java/com/eightbit/samsprung/speech/AiDictation.kt
++++ b/app/src/main/java/com/eightbit/samsprung/speech/AiDictation.kt
+@@ -13,6 +13,7 @@ import org.json.JSONObject
+ import java.io.ByteArrayOutputStream
+ import java.io.IOException
+ import java.net.HttpURLConnection
++import java.net.SocketTimeoutException
+ import java.net.URL
+ import java.util.Locale
+ import java.util.concurrent.Executors
+@@ -34,7 +35,9 @@ class AiDictation(
+     private val context: Context = context.applicationContext
+     private val main = Handler(Looper.getMainLooper())
+     private val fallback = DictationHelper(context, listener)
+-    private val executor = Executors.newSingleThreadExecutor()
++    // One thread per request, so a request that hangs never blocks the next ones
++    private val executor = Executors.newCachedThreadPool()
++    @Volatile private var connection: HttpURLConnection? = null
+ 
+     @Volatile private var recording = false
+     private var usingFallback = false
+@@ -111,6 +114,8 @@ class AiDictation(
+         }
+         fallback.destroy()
+         usingFallback = false
++        // Closes the request in progress, if any (off the main thread: it is a network call)
++        executor.execute { try { connection?.disconnect() } catch (_: Exception) { } }
+     }
+ 
+     private fun useFallback() {
+@@ -204,21 +209,34 @@ class AiDictation(
+         val main = AiSettings.model(context)
+         var last: ApiException? = null
+         for (attempt in 0 until ATTEMPTS) {
+-            val model = if (attempt < ATTEMPTS / 2) main else FALLBACK_MODEL
++            if (cancelled()) break
++            // The first try uses the chosen model, the next ones the lighter one
++            val model = if (attempt == 0) main else FALLBACK_MODEL
+             try {
+-                return callGemini(model, audio)
++                return call(model, audio)
++            } catch (ex: SocketTimeoutException) {
++                last = ApiException(DictationHelper.ERROR_AI_BUSY, 0, "sin respuesta a tiempo")
++                DictationLog.add(context, "IA: $model no respondió a tiempo, intento ${attempt + 1}")
+             } catch (ex: ApiException) {
+                 if (ex.status !in RETRY_STATUS) throw ex
+                 last = ex
+-                DictationLog.add(context, "IA: $model ocupado (${ex.status}), reintento ${attempt + 1}")
++                DictationLog.add(context, "IA: $model ocupado (${ex.status}), intento ${attempt + 1}")
+                 Thread.sleep(1500L * (attempt + 1))
+-                if (cancelled()) throw ex
+             }
+         }
+-        throw last ?: ApiException(DictationHelper.ERROR_AI_FAILED, 0, "sin respuesta")
++        throw last ?: ApiException(DictationHelper.ERROR_AI_FAILED, 0, "cancelado")
+     }
+ 
+-    private fun callGemini(model: String, audio: String): String {
++    /** Asks without "thinking" (much faster); if the model refuses that option, asks normally. */
++    private fun call(model: String, audio: String): String = try {
++        callGemini(model, audio, true)
++    } catch (ex: ApiException) {
++        if (ex.status == 400) callGemini(model, audio, false) else throw ex
++    }
++
++    private fun callGemini(model: String, audio: String, noThinking: Boolean): String {
++        val started = System.currentTimeMillis()
++        DictationLog.add(context, "IA: petición a $model" + if (noThinking) "" else " (sin ajuste de razonamiento)")
+         val body = JSONObject()
+             .put("contents", JSONArray().put(JSONObject().put("parts", JSONArray()
+                 .put(JSONObject().put("text", prompt()))
+@@ -226,16 +244,19 @@ class AiDictation(
+                     .put("mime_type", "audio/wav")
+                     .put("data", audio)))
+             )))
+-            .put("generationConfig", JSONObject().put("temperature", 0))
++            .put("generationConfig", JSONObject().put("temperature", 0).apply {
++                if (noThinking) put("thinkingConfig", JSONObject().put("thinkingBudget", 0))
++            })
+             .toString().toByteArray(Charsets.UTF_8)
+ 
+         val url = URL("https://generativelanguage.googleapis.com/v1beta/models/" +
+                 "$model:generateContent")
+         val connection = url.openConnection() as HttpURLConnection
++        this.connection = connection
+         try {
+             connection.requestMethod = "POST"
+-            connection.connectTimeout = 15000
+-            connection.readTimeout = 90000
++            connection.connectTimeout = 10000
++            connection.readTimeout = 20000
+             connection.doOutput = true
+             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+             connection.setRequestProperty("x-goog-api-key", AiSettings.apiKey(context))
+@@ -257,6 +278,7 @@ class AiDictation(
+                 } catch (_: Exception) { "" }
+                 throw ApiException(code, status, "HTTP $status ${detail.take(160)}")
+             }
++            DictationLog.add(context, "IA: respuesta en ${System.currentTimeMillis() - started} ms")
+             return parse(answer)
+         } finally {
+             connection.disconnect()
+@@ -325,7 +347,7 @@ class AiDictation(
+         private const val NO_VOICE = "[SIN_VOZ]"
+         /** Lighter alias of Gemini, used when the main model is saturated. */
+         private const val FALLBACK_MODEL = "gemini-flash-lite-latest"
+-        private const val ATTEMPTS = 4
++        private const val ATTEMPTS = 3
+         private val RETRY_STATUS = setOf(429, 500, 502, 503, 504)
+     }
+ }
