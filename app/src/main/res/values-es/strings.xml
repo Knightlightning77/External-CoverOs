@@ -156,6 +156,14 @@
     <string name="dictation_mic">Dictar</string>
     <string name="dictation_log_clear">Borrar registro</string>
     <string name="dictation_erase">Borrar último carácter</string>
+    <string name="options_dictation_ai">Dictado con IA (Gemini)</string>
+    <string name="ai_dialog_message">El micrófono graba tu voz y Gemini escribe el texto con puntuación y sin muletillas. La clave solo se guarda en este móvil. Sin clave se usa el dictado normal.</string>
+    <string name="ai_key_hint">Clave de API de Gemini</string>
+    <string name="ai_model_hint">Modelo (por defecto: %1$s)</string>
+    <string name="ai_key_error">La clave de Gemini no es válida o no tiene permiso. Revísala en los ajustes.</string>
+    <string name="ai_quota_error">Se superó el límite de uso de Gemini. Inténtalo más tarde.</string>
+    <string name="ai_network_error">No hay conexión con Gemini.</string>
+    <string name="ai_failed">Gemini no pudo transcribir el audio.</string>
     <string name="options_icon_pack">Paquete de iconos</string>
     <string name="icon_pack_default">Iconos del sistema</string>
     <string name="icon_pack_none">No hay paquetes de iconos instalados</string>

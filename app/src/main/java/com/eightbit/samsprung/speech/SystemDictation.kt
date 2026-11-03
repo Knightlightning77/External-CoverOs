@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
+import android.util.DisplayMetrics
 import android.hardware.display.DisplayManager
 import android.os.Bundle
 import android.os.Handler
@@ -34,7 +35,7 @@ import com.eightbit.samsprung.R
  */
 class SystemDictation(private val service: AccessibilityService) : DictationHelper.Listener {
 
-    private val dictation = DictationHelper(service, this)
+    private val dictation = AiDictation(service, this)
 
     private var windowManager: WindowManager? = null
     private var rootView: LinearLayout? = null
@@ -52,6 +53,9 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
     /** Placeholder texts ("Mensaje"...) that apps report as if they were the content. */
     private val placeholders = HashSet<String>()
     private var probing = false
+
+    /** Size of the buttons in pixels, fixed for the display (it never depends on app scaling). */
+    private var buttonSize = 0
 
     /** Shows (or moves) the microphone next to [field]. */
     fun show(field: AccessibilityNodeInfo, displayId: Int = -1) {
@@ -92,7 +96,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
 
     /** Removes the microphone and stops any dictation in progress. */
     fun hide() {
-        if (dictation.isListening) dictation.stop()
+        if (dictation.isListening || dictation.isProcessing) dictation.destroy()
         target = null
         removeWindow()
     }
@@ -114,7 +118,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
         windowManager = null
     }
 
-    private fun margin(): Int = (6 * service.resources.displayMetrics.density).toInt()
+    private fun margin(): Int = buttonSize / 10
 
     private fun pickDisplay(preferred: Int): Display {
         val dm = service.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
@@ -139,18 +143,25 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
             throw IllegalStateException("falta el permiso de mostrar sobre otras apps")
         }
         val context = ScaledContext(service.applicationContext).cover()
-        val density = context.resources.displayMetrics.density
-        val size = (66 * density).toInt()
-
-        val pad = (15 * density).toInt()
-        val gap = (12 * density).toInt()
+        // The size comes from the real width of the display. The density of the contexts used by
+        // the app is changed in other places, which made the buttons grow and shrink.
+        val metrics = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        display.getRealMetrics(metrics)
+        val width = minOf(metrics.widthPixels, metrics.heightPixels)
+        val size = (width * BUTTON_WIDTH_RATIO).toInt().coerceAtLeast(48)
+        val pad = size * 15 / 66
+        val gap = size * 12 / 66
+        val elevationPx = size * 6f / 66
+        buttonSize = size
+        DictationLog.add(service, "mic: ancho pantalla=$width tamaño botones=$size")
 
         val mic = ImageView(context).apply {
             setImageResource(R.drawable.ic_mic_24dp)
             imageTintList = ColorStateList.valueOf(Color.WHITE)
             setPadding(pad, pad, pad, pad)
             background = circle(IDLE_COLOR)
-            elevation = 6 * density
+            elevation = elevationPx
             contentDescription = service.getString(R.string.dictation_mic)
             setOnClickListener { onMicClicked() }
         }
@@ -159,7 +170,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
             imageTintList = ColorStateList.valueOf(Color.WHITE)
             setPadding(pad, pad, pad, pad)
             background = circle(ERASE_COLOR)
-            elevation = 6 * density
+            elevation = elevationPx
             contentDescription = service.getString(R.string.dictation_erase)
             // Tap deletes one character, holding the button keeps deleting
             setOnTouchListener { v, event ->
@@ -205,6 +216,11 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
     private fun onMicClicked() {
         stopRepeat()
         probing = false
+        // A second tap while the text is being prepared cancels it
+        if (dictation.isProcessing) {
+            dictation.destroy()
+            return
+        }
         val field = target ?: return
         if (dictation.isListening) {
             dictation.stop()
@@ -308,7 +324,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
         }
         if (current.isEmpty() || field.isShowingHintText || current in placeholders) return false
         // A dictation in progress would write its text again right after the deletion
-        if (dictation.isListening) dictation.destroy()
+        if (dictation.isListening || dictation.isProcessing) dictation.destroy()
         if (recent || current == verifiedText) {
             eraseOne(field, current)
             return true
@@ -347,6 +363,10 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
         micView?.background = circle(if (active) ACTIVE_COLOR else IDLE_COLOR)
     }
 
+    override fun onProcessing(active: Boolean) {
+        micView?.background = circle(if (active) PROCESSING_COLOR else IDLE_COLOR)
+    }
+
     override fun onText(text: String, isFinal: Boolean) {
         writeText(text)
     }
@@ -361,5 +381,8 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
         private val IDLE_COLOR = Color.parseColor("#6A3DF0")
         private val ACTIVE_COLOR = Color.parseColor("#E53935")
         private val ERASE_COLOR = Color.parseColor("#546E7A")
+        private val PROCESSING_COLOR = Color.parseColor("#F9A825")
+        /** Button size relative to the width of the display (66 px on the 260 px cover display). */
+        private const val BUTTON_WIDTH_RATIO = 66f / 260f
     }
 }

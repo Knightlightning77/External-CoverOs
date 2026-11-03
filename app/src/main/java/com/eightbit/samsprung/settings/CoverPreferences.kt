@@ -35,6 +35,7 @@ import android.os.PowerManager
 import android.os.Process
 import android.provider.MediaStore
 import android.provider.Settings
+import android.text.InputType
 import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.style.RelativeSizeSpan
@@ -51,6 +52,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import com.eightbit.samsprung.drawer.IconPacks
+import com.eightbit.samsprung.speech.AiSettings
 import com.eightbit.samsprung.speech.DictationLog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatCheckBox
@@ -711,6 +713,10 @@ class CoverPreferences : AppCompatActivity() {
         }
         if (BuildConfig.GOOGLE_PLAY) findViewById<LinearLayout>(R.id.dictation_row).isGone = true
 
+        val aiRow = findViewById<LinearLayout>(R.id.ai_dictation_row)
+        aiRow.setOnClickListener { showAiDictationDialog() }
+        if (BuildConfig.GOOGLE_PLAY) aiRow.isGone = true
+
         val vibration = findViewById<AppCompatCheckBox>(R.id.vibration_switch)
         vibration.isChecked = prefs.getBoolean(Preferences.prefReacts, true)
         vibration.setOnCheckedChangeListener { _, isChecked ->
@@ -1248,6 +1254,36 @@ class CoverPreferences : AppCompatActivity() {
 
     private fun isDeviceSecure(): Boolean {
         return with (getSystemService(KEYGUARD_SERVICE) as KeyguardManager) { isDeviceSecure }
+    }
+
+    /** API key and model of Gemini, used by the dictation microphone to transcribe and clean the text. */
+    private fun showAiDictationDialog() {
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+        }
+        val key = EditText(this).apply {
+            hint = getString(R.string.ai_key_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setText(AiSettings.apiKey(this@CoverPreferences))
+        }
+        val model = EditText(this).apply {
+            hint = getString(R.string.ai_model_hint, AiSettings.DEFAULT_MODEL)
+            inputType = InputType.TYPE_CLASS_TEXT
+            setText(AiSettings.savedModel(this@CoverPreferences))
+        }
+        layout.addView(key)
+        layout.addView(model)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.options_dictation_ai)
+            .setMessage(R.string.ai_dialog_message)
+            .setView(layout)
+            .setPositiveButton(R.string.button_confirm) { _, _ ->
+                AiSettings.save(this, key.text.toString(), model.text.toString())
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun hasPermission(permission: String) : Boolean {

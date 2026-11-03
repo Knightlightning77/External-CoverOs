@@ -1,0 +1,304 @@
+package com.eightbit.samsprung.speech
+
+import android.annotation.SuppressLint
+import android.content.Context
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
+import android.os.Handler
+import android.os.Looper
+import android.util.Base64
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.Locale
+import java.util.concurrent.Executors
+
+/**
+ * Dictation with AI: it records the voice and sends the audio to Gemini, which transcribes it and
+ * cleans the text (punctuation, filler words...) in a single request. The text arrives once, when
+ * the recording is stopped.
+ *
+ * Without an API key, or if the microphone cannot be recorded, it falls back to the recognizer
+ * of the system ([DictationHelper]).
+ *
+ * All methods must be called from the main thread.
+ */
+class AiDictation(
+    context: Context,
+    private val listener: DictationHelper.Listener
+) {
+    private val context: Context = context.applicationContext
+    private val main = Handler(Looper.getMainLooper())
+    private val fallback = DictationHelper(context, listener)
+    private val executor = Executors.newSingleThreadExecutor()
+
+    @Volatile private var recording = false
+    private var usingFallback = false
+    private var generation = 0
+
+    /** True while the audio is sent to Gemini and the answer has not arrived. */
+    var isProcessing = false
+        private set
+
+    /** True while the microphone is recording. */
+    val isListening: Boolean
+        get() = recording || (usingFallback && fallback.isListening)
+
+    fun start() {
+        if (isProcessing || recording) return
+        usingFallback = false
+        if (AiSettings.apiKey(context).isEmpty()) {
+            DictationLog.add(context, "IA: sin clave de Gemini, dictado normal")
+            useFallback()
+            return
+        }
+        if (!fallback.hasPermission()) {
+            listener.onError(DictationHelper.ERROR_PERMISSION)
+            return
+        }
+        val bufferSize = maxOf(
+            AudioRecord.getMinBufferSize(
+                SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
+            ), 8192
+        )
+        val record = try { createRecord(bufferSize) } catch (ex: Exception) { null }
+        if (record == null || record.state != AudioRecord.STATE_INITIALIZED) {
+            DictationLog.add(context, "IA: no se pudo preparar la grabación, dictado normal")
+            record?.release()
+            useFallback()
+            return
+        }
+        try {
+            record.startRecording()
+        } catch (ex: Exception) {
+            DictationLog.add(context, "IA: ERROR al grabar ${ex.javaClass.simpleName}: ${ex.message}")
+            record.release()
+            useFallback()
+            return
+        }
+        if (record.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
+            DictationLog.add(context, "IA: el sistema no deja grabar, dictado normal")
+            record.release()
+            useFallback()
+            return
+        }
+        recording = true
+        val gen = ++generation
+        listener.onListening(true)
+        Thread { readLoop(record, bufferSize, gen) }.start()
+    }
+
+    /** Stops the recording and sends it. */
+    fun stop() {
+        if (usingFallback) {
+            fallback.stop()
+            return
+        }
+        stopRecordingState()
+    }
+
+    /** Cancels everything: the recording, the request in progress and the fallback recognizer. */
+    fun destroy() {
+        generation++
+        stopRecordingState()
+        if (isProcessing) {
+            isProcessing = false
+            listener.onProcessing(false)
+        }
+        fallback.destroy()
+        usingFallback = false
+    }
+
+    private fun useFallback() {
+        usingFallback = true
+        fallback.start()
+    }
+
+    private fun stopRecordingState() {
+        if (recording) {
+            recording = false
+            listener.onListening(false)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun createRecord(bufferSize: Int) = AudioRecord(
+        MediaRecorder.AudioSource.MIC, SAMPLE_RATE,
+        AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufferSize
+    )
+
+    private fun readLoop(record: AudioRecord, bufferSize: Int, gen: Int) {
+        val out = ByteArrayOutputStream()
+        val buffer = ByteArray(bufferSize)
+        try {
+            while (recording && gen == generation && out.size() < MAX_BYTES) {
+                val read = record.read(buffer, 0, buffer.size)
+                if (read > 0) out.write(buffer, 0, read) else if (read < 0) break
+            }
+        } finally {
+            try { record.stop() } catch (_: Exception) { }
+            record.release()
+        }
+        main.post {
+            if (gen == generation) finishRecording(out.toByteArray(), gen)
+        }
+    }
+
+    private fun finishRecording(pcm: ByteArray, gen: Int) {
+        // Also covers the maximum length being reached without the user stopping
+        stopRecordingState()
+        if (pcm.size < MIN_BYTES) {
+            DictationLog.add(context, "IA: grabación demasiado corta (${pcm.size} bytes)")
+            return
+        }
+        isProcessing = true
+        listener.onProcessing(true)
+        DictationLog.add(context, "IA: enviando ${pcm.size / 32000} s de audio a Gemini")
+        executor.execute {
+            var text: String? = null
+            var error = 0
+            try {
+                text = requestText(pcm)
+            } catch (ex: ApiException) {
+                error = ex.code
+                DictationLog.add(context, "IA: ERROR ${ex.status} ${ex.message}")
+            } catch (ex: IOException) {
+                error = DictationHelper.ERROR_AI_NETWORK
+                DictationLog.add(context, "IA: ERROR de red ${ex.javaClass.simpleName}: ${ex.message}")
+            } catch (ex: Exception) {
+                error = DictationHelper.ERROR_AI_FAILED
+                DictationLog.add(context, "IA: ERROR ${ex.javaClass.simpleName}: ${ex.message}")
+            }
+            main.post {
+                // Cancelled or replaced while waiting for the answer
+                if (gen != generation || !isProcessing) return@post
+                isProcessing = false
+                listener.onProcessing(false)
+                if (error != 0) {
+                    listener.onError(error)
+                } else {
+                    val clean = text?.trim().orEmpty()
+                    if (clean.isEmpty() || clean.contains(NO_VOICE)) {
+                        DictationLog.add(context, "IA: sin voz reconocible")
+                    } else {
+                        DictationLog.add(context, "IA: texto recibido (${clean.length} caracteres)")
+                        listener.onText(clean, true)
+                    }
+                }
+            }
+        }
+    }
+
+    private class ApiException(val code: Int, val status: Int, message: String) : Exception(message)
+
+    private fun requestText(pcm: ByteArray): String {
+        val audio = Base64.encodeToString(wav(pcm), Base64.NO_WRAP)
+        val body = JSONObject()
+            .put("contents", JSONArray().put(JSONObject().put("parts", JSONArray()
+                .put(JSONObject().put("text", prompt()))
+                .put(JSONObject().put("inline_data", JSONObject()
+                    .put("mime_type", "audio/wav")
+                    .put("data", audio)))
+            )))
+            .put("generationConfig", JSONObject().put("temperature", 0))
+            .toString().toByteArray(Charsets.UTF_8)
+
+        val url = URL("https://generativelanguage.googleapis.com/v1beta/models/" +
+                "${AiSettings.model(context)}:generateContent")
+        val connection = url.openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 15000
+            connection.readTimeout = 90000
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            connection.setRequestProperty("x-goog-api-key", AiSettings.apiKey(context))
+            connection.setFixedLengthStreamingMode(body.size)
+            connection.outputStream.use { it.write(body) }
+
+            val status = connection.responseCode
+            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+            val answer = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
+            if (status !in 200..299) {
+                val code = when (status) {
+                    400, 401, 403 -> DictationHelper.ERROR_AI_KEY
+                    429 -> DictationHelper.ERROR_AI_QUOTA
+                    else -> DictationHelper.ERROR_AI_FAILED
+                }
+                val detail = try {
+                    JSONObject(answer).optJSONObject("error")?.optString("message") ?: ""
+                } catch (_: Exception) { "" }
+                throw ApiException(code, status, "HTTP $status ${detail.take(160)}")
+            }
+            return parse(answer)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun parse(answer: String): String {
+        val root = JSONObject(answer)
+        val parts = root.optJSONArray("candidates")?.optJSONObject(0)
+            ?.optJSONObject("content")?.optJSONArray("parts")
+            ?: throw ApiException(DictationHelper.ERROR_AI_FAILED, 200, "respuesta sin texto")
+        val text = StringBuilder()
+        for (i in 0 until parts.length()) {
+            val part = parts.optJSONObject(i) ?: continue
+            if (part.optBoolean("thought", false)) continue
+            text.append(part.optString("text", ""))
+        }
+        return text.toString()
+    }
+
+    private fun prompt(): String {
+        val language = Locale.getDefault().getDisplayLanguage(Locale("es"))
+        return "Eres un servicio de dictado. Transcribe el audio adjunto y devuelve ÚNICAMENTE " +
+                "el texto final listo para escribir, en el mismo idioma en que habla la persona " +
+                "(normalmente $language). Reglas: añade puntuación, mayúsculas y saltos de " +
+                "párrafo donde corresponda; elimina muletillas, titubeos, repeticiones y " +
+                "autocorrecciones; conserva el significado y el tono sin añadir, resumir ni " +
+                "traducir; interpreta órdenes habladas como \"coma\", \"punto\" o \"nueva línea\" " +
+                "como signos; no incluyas comentarios, comillas ni explicaciones. Si no hay voz " +
+                "inteligible responde exactamente $NO_VOICE."
+    }
+
+    /** Raw 16 bit mono PCM with the header of a WAV file. */
+    private fun wav(pcm: ByteArray): ByteArray {
+        val total = pcm.size + 36
+        val rate = SAMPLE_RATE
+        val header = ByteArray(44)
+        fun int(offset: Int, value: Int) {
+            for (i in 0 until 4) header[offset + i] = (value shr (8 * i) and 0xFF).toByte()
+        }
+        fun short(offset: Int, value: Int) {
+            header[offset] = (value and 0xFF).toByte()
+            header[offset + 1] = (value shr 8 and 0xFF).toByte()
+        }
+        "RIFF".toByteArray().copyInto(header, 0)
+        int(4, total)
+        "WAVEfmt ".toByteArray().copyInto(header, 8)
+        int(16, 16)
+        short(20, 1)
+        short(22, 1)
+        int(24, rate)
+        int(28, rate * 2)
+        short(32, 2)
+        short(34, 16)
+        "data".toByteArray().copyInto(header, 36)
+        int(40, pcm.size)
+        return header + pcm
+    }
+
+    companion object {
+        private const val SAMPLE_RATE = 16000
+        /** About 0.4 seconds: anything shorter is a stray tap. */
+        private const val MIN_BYTES = 12800
+        /** Five minutes of audio, well under the size limit of the request. */
+        private const val MAX_BYTES = 5 * 60 * 32000
+        private const val NO_VOICE = "[SIN_VOZ]"
+    }
+}

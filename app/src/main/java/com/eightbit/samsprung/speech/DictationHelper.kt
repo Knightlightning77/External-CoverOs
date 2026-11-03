@@ -33,6 +33,9 @@ class DictationHelper(
 
         /** Something prevented the dictation. See [messageFor] for a message to show. */
         fun onError(code: Int)
+
+        /** The audio was sent to the AI and the text has not arrived yet. */
+        fun onProcessing(active: Boolean) { }
     }
 
     private val context: Context = context.applicationContext
@@ -142,6 +145,10 @@ class DictationHelper(
     companion object {
         const val ERROR_PERMISSION = -1
         const val ERROR_UNAVAILABLE = -2
+        const val ERROR_AI_KEY = -10
+        const val ERROR_AI_QUOTA = -11
+        const val ERROR_AI_NETWORK = -12
+        const val ERROR_AI_FAILED = -13
 
         /** Message to show the user for an error code, or null if it is not worth showing. */
         @StringRes
@@ -149,6 +156,10 @@ class DictationHelper(
             ERROR_PERMISSION, SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
                 R.string.voice_permission_needed
             ERROR_UNAVAILABLE -> R.string.voice_unavailable
+            ERROR_AI_KEY -> R.string.ai_key_error
+            ERROR_AI_QUOTA -> R.string.ai_quota_error
+            ERROR_AI_NETWORK -> R.string.ai_network_error
+            ERROR_AI_FAILED -> R.string.ai_failed
             SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
                 R.string.voice_network_error
             else -> null
