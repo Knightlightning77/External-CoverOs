@@ -8,6 +8,7 @@ import android.media.MediaRecorder
 import android.os.Handler
 import android.os.Looper
 import android.util.Base64
+import com.eightbit.samsprung.R
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -169,6 +170,7 @@ class AiDictation(
         }
         isProcessing = true
         listener.onProcessing(true)
+        listener.onStatus(context.getString(R.string.ai_status_sending))
         DictationLog.add(context, "IA: enviando ${pcm.size / 32000} s de audio a Gemini")
         executor.execute {
             var text: String? = null
@@ -205,6 +207,11 @@ class AiDictation(
         }
     }
 
+    /** Tells the user what is happening. Can be called from the request thread. */
+    private fun status(text: String) {
+        main.post { if (isProcessing) listener.onStatus(text) }
+    }
+
     private class ApiException(val code: Int, val status: Int, message: String) : Exception(message)
 
     /**
@@ -224,10 +231,14 @@ class AiDictation(
             } catch (ex: SocketTimeoutException) {
                 last = ApiException(DictationHelper.ERROR_AI_BUSY, 0, "sin respuesta a tiempo")
                 DictationLog.add(context, "IA: $model no respondió a tiempo, intento ${attempt + 1}")
+                if (attempt + 1 < ATTEMPTS)
+                    status(context.getString(R.string.ai_status_retry, attempt + 2, ATTEMPTS))
             } catch (ex: ApiException) {
                 if (ex.status !in RETRY_STATUS) throw ex
                 last = ex
                 DictationLog.add(context, "IA: $model ocupado (${ex.status}), intento ${attempt + 1}")
+                if (attempt + 1 < ATTEMPTS)
+                    status(context.getString(R.string.ai_status_retry, attempt + 2, ATTEMPTS))
                 Thread.sleep(1500L * (attempt + 1))
             }
         }
@@ -269,6 +280,8 @@ class AiDictation(
             connection.setRequestProperty("x-goog-api-key", AiSettings.apiKey(context))
             connection.setFixedLengthStreamingMode(body.size)
             connection.outputStream.use { it.write(body) }
+            // The audio is sent: Gemini now transcribes it and cleans the text in the same request
+            status(context.getString(R.string.ai_status_working))
 
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream

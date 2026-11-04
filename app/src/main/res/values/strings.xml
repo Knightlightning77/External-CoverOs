@@ -166,6 +166,9 @@
     <string name="ai_network_error">Could not reach Gemini.</string>
     <string name="ai_failed">Gemini could not transcribe the audio.</string>
     <string name="ai_busy">Gemini is saturated right now. Try again in a few seconds.</string>
+    <string name="ai_status_sending">Sending audio…</string>
+    <string name="ai_status_working">Transcribing and cleaning the text…</string>
+    <string name="ai_status_retry">Gemini is busy, attempt %1$d of %2$d…</string>
     <string name="options_icon_pack">Icon pack</string>
     <string name="icon_pack_default">System icons</string>
     <string name="icon_pack_none">No icon packs are installed</string>

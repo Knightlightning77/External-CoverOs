@@ -1,0 +1,609 @@
+diff --git a/app/src/main/assets/help_en.html b/app/src/main/assets/help_en.html
+new file mode 100644
+index 0000000..a5052a0
+--- /dev/null
++++ b/app/src/main/assets/help_en.html
+@@ -0,0 +1,68 @@
++<!DOCTYPE html>
++<html lang="en">
++<head>
++<meta charset="utf-8">
++<meta name="viewport" content="width=device-width, initial-scale=1">
++<style>
++  html, body { margin: 0; background: transparent; }
++  body { font-family: sans-serif; color: #fff; padding: 12px 12px 40px; line-height: 1.4; }
++  .logo { position: fixed; top: 50%; left: 50%; width: 70vw; max-width: 320px;
++          transform: translate(-50%, -50%); opacity: .10; border-radius: 22%; z-index: -1; }
++  h1 { font-size: 20px; text-align: center; margin: 4px 0 2px; }
++  .sub { text-align: center; opacity: .85; font-size: 14px; margin-bottom: 8px; }
++  section { background: rgba(16, 24, 28, .84); border: 1px solid rgba(77, 208, 200, .45);
++            border-radius: 12px; padding: 4px 14px 10px; margin: 10px 0; }
++  h2 { font-size: 16px; color: #4DD0C8; margin: 10px 0 4px; }
++  ul, ol { margin: 4px 0; padding-left: 20px; font-size: 14px; }
++  li { margin: 3px 0; }
++  b { color: #fff; }
++</style>
++</head>
++<body>
++<img class="logo" src="{{LOGO}}" alt="">
++<h1>External Cover OS</h1>
++<div class="sub">Your cover screen, with apps, widgets and dictation.</div>
++
++<section>
++<h2>How to activate it</h2>
++<ol>
++  <li>Turn on the <b>switch</b> at the top right of this screen.</li>
++  <li>Grant the <b>permissions</b> in the list: Notifications, Usage access, Ignore battery and Accessibility.</li>
++  <li><b>Close the phone</b> and turn on the cover screen: External Cover OS appears.</li>
++  <li>Tap the bottom button to open the <b>app drawer</b>. A double tap closes the launcher.</li>
++</ol>
++</section>
++
++<section>
++<h2>What you can do</h2>
++<ul>
++  <li><b>Apps on the cover screen:</b> open any of them from the drawer, sorted by most used. Search by name, by hand or by dictating.</li>
++  <li><b>Widgets:</b> each one fills the screen; swipe to switch. Pick them in <i>Widgets</i>.</li>
++  <li><b>Notifications:</b> read and answer them, also by voice.</li>
++  <li><b>Quick toggles:</b> Wi‑Fi, Bluetooth, NFC, sound, Do Not Disturb and flashlight.</li>
++  <li><b>App bar:</b> Back, Home, Recent and rotation lock.</li>
++  <li><b>Resume:</b> if the screen turns off with apps open, a <b>fingerprint</b> button appears when it turns on again. It brings back the last three (it asks for your fingerprint if the phone is locked).</li>
++</ul>
++</section>
++
++<section>
++<h2>Dictation microphone</h2>
++<ul>
++  <li>It appears next to any text field on the cover screen. It needs the <b>Accessibility</b> service.</li>
++  <li><b>Tap</b> to start recording and tap again to stop.</li>
++  <li><b>Swipe</b> over it to switch microphones: <b>green</b> = normal, instant dictation; <b>lilac</b> = dictation with AI (Gemini), which transcribes and cleans the text with punctuation. For the lilac one, enter your key in <i>Dictation with AI</i>.</li>
++  <li>The button next to it <b>deletes</b> letter by letter; hold it to keep deleting.</li>
++</ul>
++</section>
++
++<section>
++<h2>Customization</h2>
++<ul>
++  <li><b>Cover settings:</b> accent color, theme, icon alignment, large icon, vibration and screen timeout.</li>
++  <li><b>Drawer options:</b> grid or list, apps per row, search bar, wallpaper and its blur, icon pack (like Arcticons) and assigning icons to apps that have none.</li>
++  <li><b>Hide / Show apps:</b> choose which apps appear in the drawer.</li>
++  <li>Any problem? Tap <i>Any problems?</i> to send a log.</li>
++</ul>
++</section>
++</body>
++</html>
+diff --git a/app/src/main/assets/help_es.html b/app/src/main/assets/help_es.html
+new file mode 100644
+index 0000000..ca29728
+--- /dev/null
++++ b/app/src/main/assets/help_es.html
+@@ -0,0 +1,68 @@
++<!DOCTYPE html>
++<html lang="es">
++<head>
++<meta charset="utf-8">
++<meta name="viewport" content="width=device-width, initial-scale=1">
++<style>
++  html, body { margin: 0; background: transparent; }
++  body { font-family: sans-serif; color: #fff; padding: 12px 12px 40px; line-height: 1.4; }
++  .logo { position: fixed; top: 50%; left: 50%; width: 70vw; max-width: 320px;
++          transform: translate(-50%, -50%); opacity: .10; border-radius: 22%; z-index: -1; }
++  h1 { font-size: 20px; text-align: center; margin: 4px 0 2px; }
++  .sub { text-align: center; opacity: .85; font-size: 14px; margin-bottom: 8px; }
++  section { background: rgba(16, 24, 28, .84); border: 1px solid rgba(77, 208, 200, .45);
++            border-radius: 12px; padding: 4px 14px 10px; margin: 10px 0; }
++  h2 { font-size: 16px; color: #4DD0C8; margin: 10px 0 4px; }
++  ul, ol { margin: 4px 0; padding-left: 20px; font-size: 14px; }
++  li { margin: 3px 0; }
++  b { color: #fff; }
++</style>
++</head>
++<body>
++<img class="logo" src="{{LOGO}}" alt="">
++<h1>External Cover OS</h1>
++<div class="sub">Tu pantalla externa, con apps, widgets y dictado.</div>
++
++<section>
++<h2>Cómo se activa</h2>
++<ol>
++  <li>Enciende el <b>interruptor</b> de arriba a la derecha de esta pantalla.</li>
++  <li>Concede los <b>permisos</b> de la lista: Notificaciones, Acceso de uso, Ignorar batería y Accesibilidad.</li>
++  <li><b>Cierra el móvil</b> y enciende la pantalla externa: aparece External Cover OS.</li>
++  <li>Toca el botón de abajo para abrir el <b>cajón de aplicaciones</b>. Con doble toque se cierra el launcher.</li>
++</ol>
++</section>
++
++<section>
++<h2>Qué puedes hacer</h2>
++<ul>
++  <li><b>Apps en la pantalla externa:</b> abre cualquiera desde el cajón, que se ordena por las más usadas. Búscalas por nombre, a mano o dictando.</li>
++  <li><b>Widgets:</b> cada uno ocupa toda la pantalla; desliza para cambiar. Se eligen en <i>Widgets</i>.</li>
++  <li><b>Notificaciones:</b> léelas y respóndelas, también por voz.</li>
++  <li><b>Ajustes rápidos:</b> Wi‑Fi, Bluetooth, NFC, sonido, No molestar y linterna.</li>
++  <li><b>Barra de las apps:</b> Atrás, Inicio, Reciente y bloqueo de rotación.</li>
++  <li><b>Reanudar:</b> si la pantalla se apaga con apps abiertas, al encenderla aparece el botón de <b>huella</b>. Te deja volver a las últimas tres (pide la huella si el móvil está bloqueado).</li>
++</ul>
++</section>
++
++<section>
++<h2>Micrófono de dictado</h2>
++<ul>
++  <li>Aparece junto a cualquier campo de texto de la pantalla externa. Necesita el servicio de <b>Accesibilidad</b>.</li>
++  <li><b>Toca</b> para empezar a grabar y toca otra vez para parar.</li>
++  <li><b>Desliza</b> sobre él para cambiar de micrófono: <b>verde</b> = dictado normal e inmediato, <b>lila</b> = dictado con IA (Gemini), que transcribe y limpia el texto con puntuación. Para el lila, pon tu clave en <i>Dictado con IA</i>.</li>
++  <li>El botón de al lado <b>borra</b> letra a letra; mantenlo pulsado para borrar seguido.</li>
++</ul>
++</section>
++
++<section>
++<h2>Personalización</h2>
++<ul>
++  <li><b>Ajustes de portada:</b> color de acento, tema, alineación de iconos, icono grande, vibración y tiempo de pantalla.</li>
++  <li><b>Opciones de cajón:</b> cuadrícula o lista, apps por fila, barra de búsqueda, fondo de pantalla y su desenfoque, paquete de iconos (como Arcticons) y asignación de iconos a las apps que no lo tienen.</li>
++  <li><b>Ocultar / Mostrar aplicaciones:</b> elige qué apps salen en el cajón.</li>
++  <li>¿Algún problema? Toca <i>¿Algún problema?</i> para enviar un registro.</li>
++</ul>
++</section>
++</body>
++</html>
+diff --git a/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt b/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt
+index 064efaf..dc4f69a 100755
+--- a/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt
++++ b/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt
+@@ -25,6 +25,7 @@ import android.content.res.ColorStateList
+ import android.content.res.Resources
+ import android.graphics.Bitmap
+ import android.graphics.Color
++import android.graphics.Canvas
+ import android.graphics.ImageDecoder
+ import android.graphics.Matrix
+ import android.graphics.drawable.ColorDrawable
+@@ -40,6 +41,7 @@ import android.text.Spannable
+ import android.text.SpannableStringBuilder
+ import android.text.style.RelativeSizeSpan
+ import android.util.TypedValue
++import android.util.Base64
+ import android.view.*
+ import android.view.animation.AlphaAnimation
+ import android.view.animation.Animation
+@@ -87,6 +89,7 @@ import kotlinx.coroutines.launch
+ import kotlinx.coroutines.withContext
+ import me.zhanghai.android.fastscroll.FastScrollerBuilder
+ import java.io.*
++import java.util.Locale
+ 
+ private val Number.toPx get() = TypedValue.applyDimension(
+     TypedValue.COMPLEX_UNIT_DIP, this.toFloat(), Resources.getSystem().displayMetrics
+@@ -109,7 +112,6 @@ class CoverPreferences : AppCompatActivity() {
+     private var optimization: Switch? = null
+     private var notifications: Switch? = null
+     private var statistics: Switch? = null
+-    private var keyboard: Switch? = null
+     private lateinit var wikiDrawer: DrawerLayout
+ 
+     private lateinit var hiddenList: RecyclerView
+@@ -237,24 +239,6 @@ class CoverPreferences : AppCompatActivity() {
+         }
+         toggleVoiceIcon(hasPermission(Manifest.permission.RECORD_AUDIO))
+ 
+-        keyboard = findViewById(R.id.keyboard_switch)
+-        keyboard?.isClickable = false
+-        keyboard?.isChecked = hasKeyboardInstalled()
+-        findViewById<LinearLayout>(R.id.keyboard_layout).setOnClickListener {
+-            try {
+-                val playIntent = Intent(Intent.ACTION_VIEW, Uri.parse(
+-                    "market://details?id=" + BuildConfig.APPLICATION_ID + ".ime"
+-                ))
+-                playIntent.setPackage("com.android.vending")
+-                keyboardLauncher.launch(playIntent)
+-            } catch (_: ActivityNotFoundException) {
+-                keyboardLauncher.launch(Intent(Intent.ACTION_VIEW, Uri.parse(
+-                        "https://play.google.com/store/apps/details?id="
+-                                + BuildConfig.APPLICATION_ID + ".ime"
+-                )))
+-            }
+-        }
+-
+         val nestedOptions = findViewById<ScrollView>(R.id.nested_options)
+         val general = findViewById<LinearLayout>(R.id.general)
+         val drawer = findViewById<LinearLayout>(R.id.drawer)
+@@ -791,21 +775,13 @@ class CoverPreferences : AppCompatActivity() {
+         val search = findViewById<AppCompatCheckBox>(R.id.search_switch)
+         search.setOnCheckedChangeListener { _, isChecked ->
+             with(prefs.edit()) {
+-                putBoolean(Preferences.prefSearch, isChecked && keyboard?.isChecked == true)
++                putBoolean(Preferences.prefSearch, isChecked)
+                 apply()
+             }
+         }
+-        search.isChecked = prefs.getBoolean(
+-            Preferences.prefSearch, keyboard?.isChecked == true
+-        ) && keyboard?.isChecked == true
++        search.isChecked = prefs.getBoolean(Preferences.prefSearch, true)
+         findViewById<LinearLayout>(R.id.search).setOnClickListener {
+-            search.isChecked = !search.isChecked && keyboard?.isChecked == true
+-            if (keyboard?.isChecked != true) {
+-                Toast.makeText(
+-                    this@CoverPreferences,
+-                    R.string.keyboard_missing, Toast.LENGTH_SHORT
+-                ).show()
+-            }
++            search.isChecked = !search.isChecked
+         }
+ 
+         findViewById<LinearLayout>(R.id.wallpaper_layout).setOnClickListener {
+@@ -1013,7 +989,29 @@ class CoverPreferences : AppCompatActivity() {
+         webViewSettings.cacheMode = WebSettings.LOAD_NO_CACHE
+         webViewSettings.setSupportZoom(true)
+         webViewSettings.builtInZoomControls = true
+-        mWebView.loadUrl("https://samsprung.github.io/launcher/")
++        loadHelp(mWebView)
++    }
++
++    /** Help of the side menu: a page of the app itself (assets), in Spanish or English. */
++    private fun loadHelp(webView: WebView) {
++        val language = if (Locale.getDefault().language == "es") "es" else "en"
++        val html = try {
++            assets.open("help_$language.html").bufferedReader().use { it.readText() }
++        } catch (_: Exception) { return }
++        val logo = try {
++            val size = 256
++            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
++            val icon = packageManager.getApplicationIcon(packageName)
++            icon.setBounds(0, 0, size, size)
++            icon.draw(Canvas(bitmap))
++            val out = ByteArrayOutputStream()
++            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
++            Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
++        } catch (_: Exception) { "" }
++        webView.loadDataWithBaseURL(
++            null, html.replace("{{LOGO}}", "data:image/png;base64,$logo"),
++            "text/html", "utf-8", null
++        )
+     }
+ 
+     private fun setAnimatedUpdateNotice() {
+@@ -1223,11 +1221,6 @@ class CoverPreferences : AppCompatActivity() {
+         accessibility?.isChecked = hasAccessibility()
+     }
+ 
+-    private val keyboardLauncher = registerForActivityResult(
+-        ActivityResultContracts.StartActivityForResult()) {
+-        keyboard?.isChecked = hasKeyboardInstalled()
+-    }
+-
+     private val notificationLauncher = registerForActivityResult(
+         ActivityResultContracts.StartActivityForResult()) {
+         notifications?.isChecked = hasNotificationListener()
+@@ -1331,15 +1324,6 @@ class CoverPreferences : AppCompatActivity() {
+         return false
+     }
+ 
+-    private fun hasKeyboardInstalled(): Boolean {
+-        return try {
+-            packageManager.getPackageInfo(BuildConfig.APPLICATION_ID + ".ime", 0)
+-            true
+-        } catch (_: PackageManager.NameNotFoundException) {
+-            false
+-        }
+-    }
+-
+     val updateLauncher = registerForActivityResult(
+         ActivityResultContracts.StartActivityForResult()) {
+         if (packageManager.canRequestPackageInstalls())
+diff --git a/app/src/main/java/com/eightbit/samsprung/speech/AiDictation.kt b/app/src/main/java/com/eightbit/samsprung/speech/AiDictation.kt
+index b967263..b10184f 100644
+--- a/app/src/main/java/com/eightbit/samsprung/speech/AiDictation.kt
++++ b/app/src/main/java/com/eightbit/samsprung/speech/AiDictation.kt
+@@ -8,6 +8,7 @@ import android.media.MediaRecorder
+ import android.os.Handler
+ import android.os.Looper
+ import android.util.Base64
++import com.eightbit.samsprung.R
+ import org.json.JSONArray
+ import org.json.JSONObject
+ import java.io.ByteArrayOutputStream
+@@ -169,6 +170,7 @@ class AiDictation(
+         }
+         isProcessing = true
+         listener.onProcessing(true)
++        listener.onStatus(context.getString(R.string.ai_status_sending))
+         DictationLog.add(context, "IA: enviando ${pcm.size / 32000} s de audio a Gemini")
+         executor.execute {
+             var text: String? = null
+@@ -205,6 +207,11 @@ class AiDictation(
+         }
+     }
+ 
++    /** Tells the user what is happening. Can be called from the request thread. */
++    private fun status(text: String) {
++        main.post { if (isProcessing) listener.onStatus(text) }
++    }
++
+     private class ApiException(val code: Int, val status: Int, message: String) : Exception(message)
+ 
+     /**
+@@ -224,10 +231,14 @@ class AiDictation(
+             } catch (ex: SocketTimeoutException) {
+                 last = ApiException(DictationHelper.ERROR_AI_BUSY, 0, "sin respuesta a tiempo")
+                 DictationLog.add(context, "IA: $model no respondió a tiempo, intento ${attempt + 1}")
++                if (attempt + 1 < ATTEMPTS)
++                    status(context.getString(R.string.ai_status_retry, attempt + 2, ATTEMPTS))
+             } catch (ex: ApiException) {
+                 if (ex.status !in RETRY_STATUS) throw ex
+                 last = ex
+                 DictationLog.add(context, "IA: $model ocupado (${ex.status}), intento ${attempt + 1}")
++                if (attempt + 1 < ATTEMPTS)
++                    status(context.getString(R.string.ai_status_retry, attempt + 2, ATTEMPTS))
+                 Thread.sleep(1500L * (attempt + 1))
+             }
+         }
+@@ -269,6 +280,8 @@ class AiDictation(
+             connection.setRequestProperty("x-goog-api-key", AiSettings.apiKey(context))
+             connection.setFixedLengthStreamingMode(body.size)
+             connection.outputStream.use { it.write(body) }
++            // The audio is sent: Gemini now transcribes it and cleans the text in the same request
++            status(context.getString(R.string.ai_status_working))
+ 
+             val status = connection.responseCode
+             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+diff --git a/app/src/main/java/com/eightbit/samsprung/speech/DictationHelper.kt b/app/src/main/java/com/eightbit/samsprung/speech/DictationHelper.kt
+index 61c6302..c7feb08 100644
+--- a/app/src/main/java/com/eightbit/samsprung/speech/DictationHelper.kt
++++ b/app/src/main/java/com/eightbit/samsprung/speech/DictationHelper.kt
+@@ -36,6 +36,9 @@ class DictationHelper(
+ 
+         /** The audio was sent to the AI and the text has not arrived yet. */
+         fun onProcessing(active: Boolean) { }
++
++        /** What the AI dictation is doing right now (null: nothing to show). */
++        fun onStatus(message: String?) { }
+     }
+ 
+     private val context: Context = context.applicationContext
+diff --git a/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt b/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
+index d9bd41d..a90e531 100644
+--- a/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
++++ b/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
+@@ -1,6 +1,8 @@
+ package com.eightbit.samsprung.speech
+ 
+ import android.accessibilityservice.AccessibilityService
++import android.animation.ObjectAnimator
++import android.animation.ValueAnimator
+ import android.content.Context
+ import android.content.res.ColorStateList
+ import android.graphics.Color
+@@ -8,6 +10,7 @@ import android.graphics.PixelFormat
+ import android.graphics.Rect
+ import android.graphics.drawable.GradientDrawable
+ import android.util.DisplayMetrics
++import android.util.TypedValue
+ import android.hardware.display.DisplayManager
+ import android.os.Bundle
+ import android.os.Handler
+@@ -22,6 +25,7 @@ import android.view.WindowManager
+ import android.view.accessibility.AccessibilityNodeInfo
+ import android.widget.ImageView
+ import android.widget.LinearLayout
++import android.widget.TextView
+ import android.widget.Toast
+ import com.eightbit.content.ScaledContext
+ import com.eightbit.samsprung.R
+@@ -50,6 +54,9 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+     private var micView: ImageView? = null
+     private var micParams: WindowManager.LayoutParams? = null
+     private var micDisplayId = -1
++    private var viewContext: Context? = null
++    private var statusView: TextView? = null
++    private var statusAnimator: ObjectAnimator? = null
+ 
+     private var target: AccessibilityNodeInfo? = null
+     private var baseText: CharSequence = ""
+@@ -111,6 +118,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+ 
+     private fun removeWindow() {
+         stopRepeat()
++        hideStatus()
+         rootView?.let {
+             try {
+                 if (it.parent != null) windowManager?.removeView(it)
+@@ -162,6 +170,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+         val gap = size * 12 / 66
+         val elevationPx = size * 6f / 66
+         buttonSize = size
++        viewContext = context
+         DictationLog.add(service, "mic: ancho pantalla=$width tamaño botones=$size")
+ 
+         val mic = ImageView(context).apply {
+@@ -410,6 +419,73 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+ 
+     override fun onProcessing(active: Boolean) {
+         micView?.background = circle(if (active) PROCESSING_COLOR else idleColor())
++        if (!active) hideStatus()
++    }
++
++    override fun onStatus(message: String?) {
++        if (message == null) hideStatus() else showStatus(message)
++    }
++
++    /** Small blinking box next to the buttons saying what the AI dictation is doing. */
++    private fun showStatus(text: String) {
++        val wm = windowManager ?: return
++        val context = viewContext ?: return
++        val params = micParams ?: return
++        try {
++            val screen = wm.currentWindowMetrics.bounds
++            val gap = margin()
++            val label = statusView ?: TextView(context).apply {
++                setTextColor(Color.WHITE)
++                setTextSize(TypedValue.COMPLEX_UNIT_PX, buttonSize * 0.2f)
++                setPadding(buttonSize / 5, buttonSize / 10, buttonSize / 5, buttonSize / 10)
++                background = GradientDrawable().apply {
++                    setColor(Color.parseColor("#E6263238"))
++                    cornerRadius = buttonSize * 0.25f
++                }
++            }.also { statusView = it }
++            label.maxWidth = screen.width() - 2 * gap
++            label.text = text
++            label.measure(
++                View.MeasureSpec.makeMeasureSpec(screen.width() - 2 * gap, View.MeasureSpec.AT_MOST),
++                View.MeasureSpec.UNSPECIFIED
++            )
++            val width = label.measuredWidth
++            val height = label.measuredHeight
++            val layout = WindowManager.LayoutParams(
++                WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
++                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
++                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
++                        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
++                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
++                PixelFormat.TRANSLUCENT
++            ).apply { gravity = Gravity.TOP or Gravity.START }
++            layout.x = (params.x + params.width - width).coerceIn(0, (screen.width() - width).coerceAtLeast(0))
++            // Above the buttons, or below them when there is no room
++            layout.y = if (params.y - height - gap >= 0) params.y - height - gap
++                else params.y + params.height + gap
++            if (label.parent == null) wm.addView(label, layout) else wm.updateViewLayout(label, layout)
++            if (statusAnimator == null) {
++                statusAnimator = ObjectAnimator.ofFloat(label, View.ALPHA, 1f, 0.3f).apply {
++                    duration = 600
++                    repeatMode = ValueAnimator.REVERSE
++                    repeatCount = ValueAnimator.INFINITE
++                    start()
++                }
++            }
++        } catch (ex: Exception) {
++            DictationLog.add(service, "ERROR al mostrar estado: ${ex.javaClass.simpleName}: ${ex.message}")
++        }
++    }
++
++    private fun hideStatus() {
++        statusAnimator?.cancel()
++        statusAnimator = null
++        statusView?.let {
++            try {
++                if (it.parent != null) windowManager?.removeView(it)
++            } catch (_: Exception) { }
++        }
++        statusView = null
+     }
+ 
+     override fun onText(text: String, isFinal: Boolean) {
+diff --git a/app/src/main/res/layout/preferences_layout.xml b/app/src/main/res/layout/preferences_layout.xml
+index fab3cd2..28e82d8 100755
+--- a/app/src/main/res/layout/preferences_layout.xml
++++ b/app/src/main/res/layout/preferences_layout.xml
+@@ -83,84 +83,6 @@
+                             layout="@layout/prefs_permissions"
+                             android:id="@+id/permissions" />
+ 
+-                        <LinearLayout
+-                            android:layout_width="match_parent"
+-                            android:layout_height="wrap_content"
+-                            android:background="@color/backgroundTint"
+-                            android:layout_marginTop="8dp"
+-                            android:layout_marginBottom="6dp"
+-                            android:orientation="vertical">
+-
+-                            <View
+-                                android:layout_width="match_parent"
+-                                android:layout_height="1dp"
+-                                android:background="?colorPrimary"
+-                                android:paddingTop="4dp"
+-                                android:layout_marginBottom="4dp"/>
+-
+-                            <TextView
+-                                android:layout_width="match_parent"
+-                                android:layout_height="wrap_content"
+-                                android:textSize="16sp"
+-                                android:layout_marginStart="14dp"
+-                                android:textColor="?android:textColorPrimary"
+-                                android:gravity="center_vertical"
+-                                android:text="@string/config_options" />
+-
+-                            <View
+-                                android:layout_width="match_parent"
+-                                android:layout_height="1dp"
+-                                android:background="?colorPrimary"
+-                                android:layout_marginTop="4dp" />
+-                        </LinearLayout>
+-
+-                        <LinearLayout
+-                            android:id="@+id/keyboard_layout"
+-                            android:layout_width="match_parent"
+-                            android:layout_height="wrap_content"
+-                            android:orientation="horizontal"
+-                            android:layout_marginBottom="4dp"
+-                            android:layout_marginStart="16dp"
+-                            android:layout_marginEnd="8dp"
+-                            android:gravity="center_vertical"
+-                            android:layout_gravity="center_vertical"
+-                            tools:ignore="UseCompoundDrawables">
+-
+-                            <LinearLayout
+-                                android:layout_width="0dp"
+-                                android:layout_weight="3"
+-                                android:layout_height="wrap_content"
+-                                android:orientation="vertical"
+-                                android:layout_gravity="center_vertical"
+-                                tools:ignore="UseCompoundDrawables">
+-
+-                                <TextView
+-                                    android:layout_width="match_parent"
+-                                    android:textSize="24sp"
+-                                    android:textColor="?android:textColorPrimary"
+-                                    android:gravity="center_vertical"
+-                                    android:layout_height="wrap_content"
+-                                    android:text="@string/options_keyboard" />
+-
+-                                <TextView
+-                                    android:layout_width="match_parent"
+-                                    android:textSize="14sp"
+-                                    android:textColor="?android:textColorPrimary"
+-                                    android:gravity="center_vertical"
+-                                    android:layout_height="wrap_content"
+-                                    android:text="@string/details_keyboard" />
+-                            </LinearLayout>
+-
+-                            <Switch
+-                                android:id="@+id/keyboard_switch"
+-                                android:layout_width="0dp"
+-                                android:gravity="center"
+-                                android:layout_gravity="end|center_vertical"
+-                                android:layout_weight="1"
+-                                android:layout_height="wrap_content"
+-                                tools:ignore="UseSwitchCompatOrMaterialXml" />
+-                        </LinearLayout>
+-
+                         <LinearLayout
+                             android:id="@+id/menu_general"
+                             android:layout_width="match_parent"
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index 8d7a1f5..d219c47 100755
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -166,6 +166,9 @@
+     <string name="ai_network_error">Could not reach Gemini.</string>
+     <string name="ai_failed">Gemini could not transcribe the audio.</string>
+     <string name="ai_busy">Gemini is saturated right now. Try again in a few seconds.</string>
++    <string name="ai_status_sending">Sending audio…</string>
++    <string name="ai_status_working">Transcribing and cleaning the text…</string>
++    <string name="ai_status_retry">Gemini is busy, attempt %1$d of %2$d…</string>
+     <string name="options_icon_pack">Icon pack</string>
+     <string name="icon_pack_default">System icons</string>
+     <string name="icon_pack_none">No icon packs are installed</string>
+diff --git a/app/src/main/res/values-es/strings.xml b/app/src/main/res/values-es/strings.xml
+index d22a536..cf9596d 100644
+--- a/app/src/main/res/values-es/strings.xml
++++ b/app/src/main/res/values-es/strings.xml
+@@ -166,6 +166,9 @@
+     <string name="ai_network_error">No hay conexión con Gemini.</string>
+     <string name="ai_failed">Gemini no pudo transcribir el audio.</string>
+     <string name="ai_busy">Gemini está saturado en este momento. Inténtalo de nuevo en unos segundos.</string>
++    <string name="ai_status_sending">Enviando audio…</string>
++    <string name="ai_status_working">Transcribiendo y limpiando el texto…</string>
++    <string name="ai_status_retry">Gemini ocupado, intento %1$d de %2$d…</string>
+     <string name="options_icon_pack">Paquete de iconos</string>
+     <string name="icon_pack_default">Iconos del sistema</string>
+     <string name="icon_pack_none">No hay paquetes de iconos instalados</string>

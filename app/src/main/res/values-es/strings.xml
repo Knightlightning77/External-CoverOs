@@ -166,6 +166,9 @@
     <string name="ai_network_error">No hay conexión con Gemini.</string>
     <string name="ai_failed">Gemini no pudo transcribir el audio.</string>
     <string name="ai_busy">Gemini está saturado en este momento. Inténtalo de nuevo en unos segundos.</string>
+    <string name="ai_status_sending">Enviando audio…</string>
+    <string name="ai_status_working">Transcribiendo y limpiando el texto…</string>
+    <string name="ai_status_retry">Gemini ocupado, intento %1$d de %2$d…</string>
     <string name="options_icon_pack">Paquete de iconos</string>
     <string name="icon_pack_default">Iconos del sistema</string>
     <string name="icon_pack_none">No hay paquetes de iconos instalados</string>

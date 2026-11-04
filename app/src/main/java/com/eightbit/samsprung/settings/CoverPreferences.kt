@@ -25,6 +25,7 @@ import android.content.res.ColorStateList
 import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.Canvas
 import android.graphics.ImageDecoder
 import android.graphics.Matrix
 import android.graphics.drawable.ColorDrawable
@@ -40,6 +41,7 @@ import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.style.RelativeSizeSpan
 import android.util.TypedValue
+import android.util.Base64
 import android.view.*
 import android.view.animation.AlphaAnimation
 import android.view.animation.Animation
@@ -87,6 +89,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.zhanghai.android.fastscroll.FastScrollerBuilder
 import java.io.*
+import java.util.Locale
 
 private val Number.toPx get() = TypedValue.applyDimension(
     TypedValue.COMPLEX_UNIT_DIP, this.toFloat(), Resources.getSystem().displayMetrics
@@ -109,7 +112,6 @@ class CoverPreferences : AppCompatActivity() {
     private var optimization: Switch? = null
     private var notifications: Switch? = null
     private var statistics: Switch? = null
-    private var keyboard: Switch? = null
     private lateinit var wikiDrawer: DrawerLayout
 
     private lateinit var hiddenList: RecyclerView
@@ -236,24 +238,6 @@ class CoverPreferences : AppCompatActivity() {
             requestVoice.launch(Manifest.permission.RECORD_AUDIO)
         }
         toggleVoiceIcon(hasPermission(Manifest.permission.RECORD_AUDIO))
-
-        keyboard = findViewById(R.id.keyboard_switch)
-        keyboard?.isClickable = false
-        keyboard?.isChecked = hasKeyboardInstalled()
-        findViewById<LinearLayout>(R.id.keyboard_layout).setOnClickListener {
-            try {
-                val playIntent = Intent(Intent.ACTION_VIEW, Uri.parse(
-                    "market://details?id=" + BuildConfig.APPLICATION_ID + ".ime"
-                ))
-                playIntent.setPackage("com.android.vending")
-                keyboardLauncher.launch(playIntent)
-            } catch (_: ActivityNotFoundException) {
-                keyboardLauncher.launch(Intent(Intent.ACTION_VIEW, Uri.parse(
-                        "https://play.google.com/store/apps/details?id="
-                                + BuildConfig.APPLICATION_ID + ".ime"
-                )))
-            }
-        }
 
         val nestedOptions = findViewById<ScrollView>(R.id.nested_options)
         val general = findViewById<LinearLayout>(R.id.general)
@@ -791,21 +775,13 @@ class CoverPreferences : AppCompatActivity() {
         val search = findViewById<AppCompatCheckBox>(R.id.search_switch)
         search.setOnCheckedChangeListener { _, isChecked ->
             with(prefs.edit()) {
-                putBoolean(Preferences.prefSearch, isChecked && keyboard?.isChecked == true)
+                putBoolean(Preferences.prefSearch, isChecked)
                 apply()
             }
         }
-        search.isChecked = prefs.getBoolean(
-            Preferences.prefSearch, keyboard?.isChecked == true
-        ) && keyboard?.isChecked == true
+        search.isChecked = prefs.getBoolean(Preferences.prefSearch, true)
         findViewById<LinearLayout>(R.id.search).setOnClickListener {
-            search.isChecked = !search.isChecked && keyboard?.isChecked == true
-            if (keyboard?.isChecked != true) {
-                Toast.makeText(
-                    this@CoverPreferences,
-                    R.string.keyboard_missing, Toast.LENGTH_SHORT
-                ).show()
-            }
+            search.isChecked = !search.isChecked
         }
 
         findViewById<LinearLayout>(R.id.wallpaper_layout).setOnClickListener {
@@ -1013,7 +989,29 @@ class CoverPreferences : AppCompatActivity() {
         webViewSettings.cacheMode = WebSettings.LOAD_NO_CACHE
         webViewSettings.setSupportZoom(true)
         webViewSettings.builtInZoomControls = true
-        mWebView.loadUrl("https://samsprung.github.io/launcher/")
+        loadHelp(mWebView)
+    }
+
+    /** Help of the side menu: a page of the app itself (assets), in Spanish or English. */
+    private fun loadHelp(webView: WebView) {
+        val language = if (Locale.getDefault().language == "es") "es" else "en"
+        val html = try {
+            assets.open("help_$language.html").bufferedReader().use { it.readText() }
+        } catch (_: Exception) { return }
+        val logo = try {
+            val size = 256
+            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val icon = packageManager.getApplicationIcon(packageName)
+            icon.setBounds(0, 0, size, size)
+            icon.draw(Canvas(bitmap))
+            val out = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+        } catch (_: Exception) { "" }
+        webView.loadDataWithBaseURL(
+            null, html.replace("{{LOGO}}", "data:image/png;base64,$logo"),
+            "text/html", "utf-8", null
+        )
     }
 
     private fun setAnimatedUpdateNotice() {
@@ -1223,11 +1221,6 @@ class CoverPreferences : AppCompatActivity() {
         accessibility?.isChecked = hasAccessibility()
     }
 
-    private val keyboardLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()) {
-        keyboard?.isChecked = hasKeyboardInstalled()
-    }
-
     private val notificationLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()) {
         notifications?.isChecked = hasNotificationListener()
@@ -1329,15 +1322,6 @@ class CoverPreferences : AppCompatActivity() {
             }
         } catch (_: SecurityException) { }
         return false
-    }
-
-    private fun hasKeyboardInstalled(): Boolean {
-        return try {
-            packageManager.getPackageInfo(BuildConfig.APPLICATION_ID + ".ime", 0)
-            true
-        } catch (_: PackageManager.NameNotFoundException) {
-            false
-        }
     }
 
     val updateLauncher = registerForActivityResult(

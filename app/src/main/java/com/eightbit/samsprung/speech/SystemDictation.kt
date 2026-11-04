@@ -1,6 +1,8 @@
 package com.eightbit.samsprung.speech
 
 import android.accessibilityservice.AccessibilityService
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
@@ -8,6 +10,7 @@ import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.util.DisplayMetrics
+import android.util.TypedValue
 import android.hardware.display.DisplayManager
 import android.os.Bundle
 import android.os.Handler
@@ -22,6 +25,7 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import com.eightbit.content.ScaledContext
 import com.eightbit.samsprung.R
@@ -50,6 +54,9 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
     private var micView: ImageView? = null
     private var micParams: WindowManager.LayoutParams? = null
     private var micDisplayId = -1
+    private var viewContext: Context? = null
+    private var statusView: TextView? = null
+    private var statusAnimator: ObjectAnimator? = null
 
     private var target: AccessibilityNodeInfo? = null
     private var baseText: CharSequence = ""
@@ -111,6 +118,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
 
     private fun removeWindow() {
         stopRepeat()
+        hideStatus()
         rootView?.let {
             try {
                 if (it.parent != null) windowManager?.removeView(it)
@@ -162,6 +170,7 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
         val gap = size * 12 / 66
         val elevationPx = size * 6f / 66
         buttonSize = size
+        viewContext = context
         DictationLog.add(service, "mic: ancho pantalla=$width tamaño botones=$size")
 
         val mic = ImageView(context).apply {
@@ -410,6 +419,73 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
 
     override fun onProcessing(active: Boolean) {
         micView?.background = circle(if (active) PROCESSING_COLOR else idleColor())
+        if (!active) hideStatus()
+    }
+
+    override fun onStatus(message: String?) {
+        if (message == null) hideStatus() else showStatus(message)
+    }
+
+    /** Small blinking box next to the buttons saying what the AI dictation is doing. */
+    private fun showStatus(text: String) {
+        val wm = windowManager ?: return
+        val context = viewContext ?: return
+        val params = micParams ?: return
+        try {
+            val screen = wm.currentWindowMetrics.bounds
+            val gap = margin()
+            val label = statusView ?: TextView(context).apply {
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_PX, buttonSize * 0.2f)
+                setPadding(buttonSize / 5, buttonSize / 10, buttonSize / 5, buttonSize / 10)
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor("#E6263238"))
+                    cornerRadius = buttonSize * 0.25f
+                }
+            }.also { statusView = it }
+            label.maxWidth = screen.width() - 2 * gap
+            label.text = text
+            label.measure(
+                View.MeasureSpec.makeMeasureSpec(screen.width() - 2 * gap, View.MeasureSpec.AT_MOST),
+                View.MeasureSpec.UNSPECIFIED
+            )
+            val width = label.measuredWidth
+            val height = label.measuredHeight
+            val layout = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.TRANSLUCENT
+            ).apply { gravity = Gravity.TOP or Gravity.START }
+            layout.x = (params.x + params.width - width).coerceIn(0, (screen.width() - width).coerceAtLeast(0))
+            // Above the buttons, or below them when there is no room
+            layout.y = if (params.y - height - gap >= 0) params.y - height - gap
+                else params.y + params.height + gap
+            if (label.parent == null) wm.addView(label, layout) else wm.updateViewLayout(label, layout)
+            if (statusAnimator == null) {
+                statusAnimator = ObjectAnimator.ofFloat(label, View.ALPHA, 1f, 0.3f).apply {
+                    duration = 600
+                    repeatMode = ValueAnimator.REVERSE
+                    repeatCount = ValueAnimator.INFINITE
+                    start()
+                }
+            }
+        } catch (ex: Exception) {
+            DictationLog.add(service, "ERROR al mostrar estado: ${ex.javaClass.simpleName}: ${ex.message}")
+        }
+    }
+
+    private fun hideStatus() {
+        statusAnimator?.cancel()
+        statusAnimator = null
+        statusView?.let {
+            try {
+                if (it.parent != null) windowManager?.removeView(it)
+            } catch (_: Exception) { }
+        }
+        statusView = null
     }
 
     override fun onText(text: String, isFinal: Boolean) {

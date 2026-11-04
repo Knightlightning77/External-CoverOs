@@ -36,6 +36,9 @@ class DictationHelper(
 
         /** The audio was sent to the AI and the text has not arrived yet. */
         fun onProcessing(active: Boolean) { }
+
+        /** What the AI dictation is doing right now (null: nothing to show). */
+        fun onStatus(message: String?) { }
     }
 
     private val context: Context = context.applicationContext
