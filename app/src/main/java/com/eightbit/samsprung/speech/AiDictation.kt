@@ -62,8 +62,8 @@ class AiDictation(
             useFallback()
             return
         }
-        if (AiSettings.apiKey(context).isEmpty()) {
-            DictationLog.add(context, "IA: sin clave de Gemini, dictado normal")
+        if (AiSettings.apiKey(context).isEmpty() && AiSettings.openAiKey(context).isEmpty()) {
+            DictationLog.add(context, "IA: sin claves de IA, dictado normal")
             useFallback()
             return
         }
@@ -218,8 +218,23 @@ class AiDictation(
      * Gemini is sometimes saturated (503). The request is repeated a few times and, if the model
      * is still busy, the lighter model is tried too.
      */
+    /** Gemini first; if it fails after its retries, ChatGPT (when its key is set). */
     private fun requestText(pcm: ByteArray, cancelled: () -> Boolean): String {
         val audio = Base64.encodeToString(wav(pcm), Base64.NO_WRAP)
+        val hasOpenAi = AiSettings.openAiKey(context).isNotEmpty()
+        if (AiSettings.apiKey(context).isNotEmpty()) {
+            try {
+                return geminiText(audio, cancelled)
+            } catch (ex: Exception) {
+                if (!hasOpenAi || cancelled()) throw ex
+                DictationLog.add(context, "IA: Gemini falló (${ex.message}), probando con ChatGPT")
+                status(context.getString(R.string.ai_status_openai_fallback))
+            }
+        }
+        return openAiText(audio, cancelled)
+    }
+
+    private fun geminiText(audio: String, cancelled: () -> Boolean): String {
         val main = AiSettings.model(context)
         var last: ApiException? = null
         for (attempt in 0 until ATTEMPTS) {
@@ -243,6 +258,97 @@ class AiDictation(
             }
         }
         throw last ?: ApiException(DictationHelper.ERROR_AI_FAILED, 0, "cancelado")
+    }
+
+    private fun openAiText(audio: String, cancelled: () -> Boolean): String {
+        val model = AiSettings.openAiModel(context)
+        var last: Exception? = null
+        for (attempt in 0 until OPENAI_ATTEMPTS) {
+            if (cancelled()) break
+            try {
+                // Text-only answer; if the model refuses that, ask for the audio answer too
+                return try {
+                    callOpenAi(model, audio, true)
+                } catch (ex: ApiException) {
+                    if (ex.status == 400) callOpenAi(model, audio, false) else throw ex
+                }
+            } catch (ex: SocketTimeoutException) {
+                last = ApiException(DictationHelper.ERROR_AI_BUSY, 0, "sin respuesta a tiempo")
+                DictationLog.add(context, "IA: ChatGPT no respondió a tiempo, intento ${attempt + 1}")
+            } catch (ex: ApiException) {
+                if (ex.status !in RETRY_STATUS) throw ex
+                last = ex
+                DictationLog.add(context, "IA: ChatGPT ocupado (${ex.status}), intento ${attempt + 1}")
+                Thread.sleep(1500L)
+            }
+        }
+        throw last ?: ApiException(DictationHelper.ERROR_AI_FAILED, 0, "cancelado")
+    }
+
+    private fun callOpenAi(model: String, audio: String, textOnly: Boolean): String {
+        val started = System.currentTimeMillis()
+        DictationLog.add(context, "IA: petición a ChatGPT ($model)" + if (textOnly) "" else " (con salida de audio)")
+        val message = JSONObject().put("role", "user").put("content", JSONArray()
+            .put(JSONObject().put("type", "text").put("text", prompt()))
+            .put(JSONObject().put("type", "input_audio").put("input_audio", JSONObject()
+                .put("data", audio)
+                .put("format", "wav"))))
+        val json = JSONObject().put("model", model).put("messages", JSONArray().put(message))
+        if (textOnly) {
+            json.put("modalities", JSONArray().put("text"))
+        } else {
+            json.put("modalities", JSONArray().put("text").put("audio"))
+            json.put("audio", JSONObject().put("voice", "alloy").put("format", "wav"))
+        }
+        val answer = postJson(
+            "https://api.openai.com/v1/chat/completions",
+            "Authorization", "Bearer ${AiSettings.openAiKey(context)}",
+            json.toString().toByteArray(Charsets.UTF_8), 30000
+        ) { status(context.getString(R.string.ai_status_openai)) }
+        DictationLog.add(context, "IA: respuesta en ${System.currentTimeMillis() - started} ms")
+        val reply = JSONObject(answer).optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")
+            ?: throw ApiException(DictationHelper.ERROR_AI_FAILED, 200, "respuesta sin texto")
+        val text = reply.optString("content", "")
+        return if (text.isNotBlank() && text != "null") text
+        else reply.optJSONObject("audio")?.optString("transcript", "") ?: ""
+    }
+
+    /** Sends a JSON body and returns the answer; errors of the service become [ApiException]. */
+    private fun postJson(
+        address: String, header: String, value: String, body: ByteArray,
+        readTimeout: Int, onSent: () -> Unit
+    ): String {
+        val connection = URL(address).openConnection() as HttpURLConnection
+        this.connection = connection
+        try {
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 10000
+            connection.readTimeout = readTimeout
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            connection.setRequestProperty(header, value)
+            connection.setFixedLengthStreamingMode(body.size)
+            connection.outputStream.use { it.write(body) }
+            onSent()
+            val status = connection.responseCode
+            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+            val answer = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
+            if (status !in 200..299) {
+                val code = when (status) {
+                    401, 403 -> DictationHelper.ERROR_AI_KEY
+                    429 -> DictationHelper.ERROR_AI_QUOTA
+                    in RETRY_STATUS -> DictationHelper.ERROR_AI_BUSY
+                    else -> DictationHelper.ERROR_AI_FAILED
+                }
+                val detail = try {
+                    JSONObject(answer).optJSONObject("error")?.optString("message") ?: ""
+                } catch (_: Exception) { "" }
+                throw ApiException(code, status, "HTTP $status ${detail.take(160)}")
+            }
+            return answer
+        } finally {
+            connection.disconnect()
+        }
     }
 
     /** Asks without "thinking" (much faster); if the model refuses that option, asks normally. */
@@ -368,6 +474,7 @@ class AiDictation(
         /** Lighter alias of Gemini, used when the main model is saturated. */
         private const val FALLBACK_MODEL = "gemini-flash-lite-latest"
         private const val ATTEMPTS = 3
+        private const val OPENAI_ATTEMPTS = 2
         private val RETRY_STATUS = setOf(429, 500, 502, 503, 504)
     }
 }

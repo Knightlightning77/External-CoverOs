@@ -11,9 +11,14 @@ object AiSettings {
     private const val KEY = "geminiKey"
     private const val MODEL = "geminiModel"
     private const val AI_MODE = "aiMode"
+    private const val OPENAI_KEY = "openAiKey"
+    private const val OPENAI_MODEL = "openAiModel"
 
     /** Alias that always points to the current Flash model of Gemini. */
     const val DEFAULT_MODEL = "gemini-flash-latest"
+
+    /** Model of OpenAI that understands audio, used when Gemini fails. */
+    const val DEFAULT_OPENAI_MODEL = "gpt-audio-1.5"
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -33,7 +38,20 @@ object AiSettings {
         prefs(context).edit().putBoolean(AI_MODE, on).apply()
     }
 
-    fun save(context: Context, key: String, model: String) {
-        prefs(context).edit().putString(KEY, key.trim()).putString(MODEL, model.trim()).apply()
+    fun openAiKey(context: Context): String = prefs(context).getString(OPENAI_KEY, "")?.trim() ?: ""
+
+    fun openAiModel(context: Context): String =
+        prefs(context).getString(OPENAI_MODEL, "")?.trim()?.takeIf { it.isNotEmpty() }
+            ?: DEFAULT_OPENAI_MODEL
+
+    fun savedOpenAiModel(context: Context): String = prefs(context).getString(OPENAI_MODEL, "") ?: ""
+
+    fun save(context: Context, key: String, model: String, openAiKey: String, openAiModel: String) {
+        prefs(context).edit()
+            .putString(KEY, key.trim())
+            .putString(MODEL, model.trim())
+            .putString(OPENAI_KEY, openAiKey.trim())
+            .putString(OPENAI_MODEL, openAiModel.trim())
+            .apply()
     }
 }

@@ -1267,14 +1267,29 @@ class CoverPreferences : AppCompatActivity() {
             inputType = InputType.TYPE_CLASS_TEXT
             setText(AiSettings.savedModel(this@CoverPreferences))
         }
+        val openAiKey = EditText(this).apply {
+            hint = getString(R.string.ai_openai_key_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setText(AiSettings.openAiKey(this@CoverPreferences))
+        }
+        val openAiModel = EditText(this).apply {
+            hint = getString(R.string.ai_openai_model_hint, AiSettings.DEFAULT_OPENAI_MODEL)
+            inputType = InputType.TYPE_CLASS_TEXT
+            setText(AiSettings.savedOpenAiModel(this@CoverPreferences))
+        }
         layout.addView(key)
         layout.addView(model)
+        layout.addView(openAiKey)
+        layout.addView(openAiModel)
         AlertDialog.Builder(this)
             .setTitle(R.string.options_dictation_ai)
             .setMessage(R.string.ai_dialog_message)
-            .setView(layout)
+            .setView(ScrollView(this).apply { addView(layout) })
             .setPositiveButton(R.string.button_confirm) { _, _ ->
-                AiSettings.save(this, key.text.toString(), model.text.toString())
+                AiSettings.save(
+                    this, key.text.toString(), model.text.toString(),
+                    openAiKey.text.toString(), openAiModel.text.toString()
+                )
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()

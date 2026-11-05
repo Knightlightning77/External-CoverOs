@@ -1,0 +1,330 @@
+diff --git a/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt b/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt
+index 35b2412..b279384 100755
+--- a/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt
++++ b/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt
+@@ -1267,14 +1267,29 @@ class CoverPreferences : AppCompatActivity() {
+             inputType = InputType.TYPE_CLASS_TEXT
+             setText(AiSettings.savedModel(this@CoverPreferences))
+         }
++        val openAiKey = EditText(this).apply {
++            hint = getString(R.string.ai_openai_key_hint)
++            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
++            setText(AiSettings.openAiKey(this@CoverPreferences))
++        }
++        val openAiModel = EditText(this).apply {
++            hint = getString(R.string.ai_openai_model_hint, AiSettings.DEFAULT_OPENAI_MODEL)
++            inputType = InputType.TYPE_CLASS_TEXT
++            setText(AiSettings.savedOpenAiModel(this@CoverPreferences))
++        }
+         layout.addView(key)
+         layout.addView(model)
++        layout.addView(openAiKey)
++        layout.addView(openAiModel)
+         AlertDialog.Builder(this)
+             .setTitle(R.string.options_dictation_ai)
+             .setMessage(R.string.ai_dialog_message)
+-            .setView(layout)
++            .setView(ScrollView(this).apply { addView(layout) })
+             .setPositiveButton(R.string.button_confirm) { _, _ ->
+-                AiSettings.save(this, key.text.toString(), model.text.toString())
++                AiSettings.save(
++                    this, key.text.toString(), model.text.toString(),
++                    openAiKey.text.toString(), openAiModel.text.toString()
++                )
+             }
+             .setNegativeButton(android.R.string.cancel, null)
+             .show()
+diff --git a/app/src/main/java/com/eightbit/samsprung/speech/AiDictation.kt b/app/src/main/java/com/eightbit/samsprung/speech/AiDictation.kt
+index b10184f..b937de0 100644
+--- a/app/src/main/java/com/eightbit/samsprung/speech/AiDictation.kt
++++ b/app/src/main/java/com/eightbit/samsprung/speech/AiDictation.kt
+@@ -62,8 +62,8 @@ class AiDictation(
+             useFallback()
+             return
+         }
+-        if (AiSettings.apiKey(context).isEmpty()) {
+-            DictationLog.add(context, "IA: sin clave de Gemini, dictado normal")
++        if (AiSettings.apiKey(context).isEmpty() && AiSettings.openAiKey(context).isEmpty()) {
++            DictationLog.add(context, "IA: sin claves de IA, dictado normal")
+             useFallback()
+             return
+         }
+@@ -218,8 +218,23 @@ class AiDictation(
+      * Gemini is sometimes saturated (503). The request is repeated a few times and, if the model
+      * is still busy, the lighter model is tried too.
+      */
++    /** Gemini first; if it fails after its retries, ChatGPT (when its key is set). */
+     private fun requestText(pcm: ByteArray, cancelled: () -> Boolean): String {
+         val audio = Base64.encodeToString(wav(pcm), Base64.NO_WRAP)
++        val hasOpenAi = AiSettings.openAiKey(context).isNotEmpty()
++        if (AiSettings.apiKey(context).isNotEmpty()) {
++            try {
++                return geminiText(audio, cancelled)
++            } catch (ex: Exception) {
++                if (!hasOpenAi || cancelled()) throw ex
++                DictationLog.add(context, "IA: Gemini falló (${ex.message}), probando con ChatGPT")
++                status(context.getString(R.string.ai_status_openai_fallback))
++            }
++        }
++        return openAiText(audio, cancelled)
++    }
++
++    private fun geminiText(audio: String, cancelled: () -> Boolean): String {
+         val main = AiSettings.model(context)
+         var last: ApiException? = null
+         for (attempt in 0 until ATTEMPTS) {
+@@ -245,6 +260,97 @@ class AiDictation(
+         throw last ?: ApiException(DictationHelper.ERROR_AI_FAILED, 0, "cancelado")
+     }
+ 
++    private fun openAiText(audio: String, cancelled: () -> Boolean): String {
++        val model = AiSettings.openAiModel(context)
++        var last: Exception? = null
++        for (attempt in 0 until OPENAI_ATTEMPTS) {
++            if (cancelled()) break
++            try {
++                // Text-only answer; if the model refuses that, ask for the audio answer too
++                return try {
++                    callOpenAi(model, audio, true)
++                } catch (ex: ApiException) {
++                    if (ex.status == 400) callOpenAi(model, audio, false) else throw ex
++                }
++            } catch (ex: SocketTimeoutException) {
++                last = ApiException(DictationHelper.ERROR_AI_BUSY, 0, "sin respuesta a tiempo")
++                DictationLog.add(context, "IA: ChatGPT no respondió a tiempo, intento ${attempt + 1}")
++            } catch (ex: ApiException) {
++                if (ex.status !in RETRY_STATUS) throw ex
++                last = ex
++                DictationLog.add(context, "IA: ChatGPT ocupado (${ex.status}), intento ${attempt + 1}")
++                Thread.sleep(1500L)
++            }
++        }
++        throw last ?: ApiException(DictationHelper.ERROR_AI_FAILED, 0, "cancelado")
++    }
++
++    private fun callOpenAi(model: String, audio: String, textOnly: Boolean): String {
++        val started = System.currentTimeMillis()
++        DictationLog.add(context, "IA: petición a ChatGPT ($model)" + if (textOnly) "" else " (con salida de audio)")
++        val message = JSONObject().put("role", "user").put("content", JSONArray()
++            .put(JSONObject().put("type", "text").put("text", prompt()))
++            .put(JSONObject().put("type", "input_audio").put("input_audio", JSONObject()
++                .put("data", audio)
++                .put("format", "wav"))))
++        val json = JSONObject().put("model", model).put("messages", JSONArray().put(message))
++        if (textOnly) {
++            json.put("modalities", JSONArray().put("text"))
++        } else {
++            json.put("modalities", JSONArray().put("text").put("audio"))
++            json.put("audio", JSONObject().put("voice", "alloy").put("format", "wav"))
++        }
++        val answer = postJson(
++            "https://api.openai.com/v1/chat/completions",
++            "Authorization", "Bearer ${AiSettings.openAiKey(context)}",
++            json.toString().toByteArray(Charsets.UTF_8), 30000
++        ) { status(context.getString(R.string.ai_status_openai)) }
++        DictationLog.add(context, "IA: respuesta en ${System.currentTimeMillis() - started} ms")
++        val reply = JSONObject(answer).optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")
++            ?: throw ApiException(DictationHelper.ERROR_AI_FAILED, 200, "respuesta sin texto")
++        val text = reply.optString("content", "")
++        return if (text.isNotBlank() && text != "null") text
++        else reply.optJSONObject("audio")?.optString("transcript", "") ?: ""
++    }
++
++    /** Sends a JSON body and returns the answer; errors of the service become [ApiException]. */
++    private fun postJson(
++        address: String, header: String, value: String, body: ByteArray,
++        readTimeout: Int, onSent: () -> Unit
++    ): String {
++        val connection = URL(address).openConnection() as HttpURLConnection
++        this.connection = connection
++        try {
++            connection.requestMethod = "POST"
++            connection.connectTimeout = 10000
++            connection.readTimeout = readTimeout
++            connection.doOutput = true
++            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
++            connection.setRequestProperty(header, value)
++            connection.setFixedLengthStreamingMode(body.size)
++            connection.outputStream.use { it.write(body) }
++            onSent()
++            val status = connection.responseCode
++            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
++            val answer = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
++            if (status !in 200..299) {
++                val code = when (status) {
++                    401, 403 -> DictationHelper.ERROR_AI_KEY
++                    429 -> DictationHelper.ERROR_AI_QUOTA
++                    in RETRY_STATUS -> DictationHelper.ERROR_AI_BUSY
++                    else -> DictationHelper.ERROR_AI_FAILED
++                }
++                val detail = try {
++                    JSONObject(answer).optJSONObject("error")?.optString("message") ?: ""
++                } catch (_: Exception) { "" }
++                throw ApiException(code, status, "HTTP $status ${detail.take(160)}")
++            }
++            return answer
++        } finally {
++            connection.disconnect()
++        }
++    }
++
+     /** Asks without "thinking" (much faster); if the model refuses that option, asks normally. */
+     private fun call(model: String, audio: String): String = try {
+         callGemini(model, audio, true)
+@@ -368,6 +474,7 @@ class AiDictation(
+         /** Lighter alias of Gemini, used when the main model is saturated. */
+         private const val FALLBACK_MODEL = "gemini-flash-lite-latest"
+         private const val ATTEMPTS = 3
++        private const val OPENAI_ATTEMPTS = 2
+         private val RETRY_STATUS = setOf(429, 500, 502, 503, 504)
+     }
+ }
+diff --git a/app/src/main/java/com/eightbit/samsprung/speech/AiSettings.kt b/app/src/main/java/com/eightbit/samsprung/speech/AiSettings.kt
+index 4d3a05e..b497698 100644
+--- a/app/src/main/java/com/eightbit/samsprung/speech/AiSettings.kt
++++ b/app/src/main/java/com/eightbit/samsprung/speech/AiSettings.kt
+@@ -11,10 +11,15 @@ object AiSettings {
+     private const val KEY = "geminiKey"
+     private const val MODEL = "geminiModel"
+     private const val AI_MODE = "aiMode"
++    private const val OPENAI_KEY = "openAiKey"
++    private const val OPENAI_MODEL = "openAiModel"
+ 
+     /** Alias that always points to the current Flash model of Gemini. */
+     const val DEFAULT_MODEL = "gemini-flash-latest"
+ 
++    /** Model of OpenAI that understands audio, used when Gemini fails. */
++    const val DEFAULT_OPENAI_MODEL = "gpt-audio-1.5"
++
+     private fun prefs(context: Context) =
+         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+ 
+@@ -33,7 +38,20 @@ object AiSettings {
+         prefs(context).edit().putBoolean(AI_MODE, on).apply()
+     }
+ 
+-    fun save(context: Context, key: String, model: String) {
+-        prefs(context).edit().putString(KEY, key.trim()).putString(MODEL, model.trim()).apply()
++    fun openAiKey(context: Context): String = prefs(context).getString(OPENAI_KEY, "")?.trim() ?: ""
++
++    fun openAiModel(context: Context): String =
++        prefs(context).getString(OPENAI_MODEL, "")?.trim()?.takeIf { it.isNotEmpty() }
++            ?: DEFAULT_OPENAI_MODEL
++
++    fun savedOpenAiModel(context: Context): String = prefs(context).getString(OPENAI_MODEL, "") ?: ""
++
++    fun save(context: Context, key: String, model: String, openAiKey: String, openAiModel: String) {
++        prefs(context).edit()
++            .putString(KEY, key.trim())
++            .putString(MODEL, model.trim())
++            .putString(OPENAI_KEY, openAiKey.trim())
++            .putString(OPENAI_MODEL, openAiModel.trim())
++            .apply()
+     }
+ }
+diff --git a/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt b/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
+index a90e531..e16abf2 100644
+--- a/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
++++ b/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
+@@ -366,6 +366,8 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+         val field = target ?: return false
+         // Waiting for the check of a previous press: keep going, but do nothing yet
+         if (probing) return true
++        // A selected text goes away at once (and holding the button does not go on deleting)
++        if (deleteSelection(field)) return false
+ 
+         val recent = verifiedText != null && SystemClock.uptimeMillis() - verifiedAt < 1500
+         val current: String
+@@ -399,6 +401,34 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+         return true
+     }
+ 
++    /** Deletes the selected text in one go. Returns false when nothing is selected. */
++    private fun deleteSelection(field: AccessibilityNodeInfo): Boolean {
++        field.refresh()
++        val text = field.text?.toString() ?: return false
++        val start = minOf(field.textSelectionStart, field.textSelectionEnd)
++        val end = maxOf(field.textSelectionStart, field.textSelectionEnd)
++        if (start < 0 || end <= start || end > text.length) return false
++        if (field.isShowingHintText || text in placeholders) return false
++        if (dictation.isListening || dictation.isProcessing) dictation.destroy()
++        val next = text.removeRange(start, end)
++        setFieldText(field, next)
++        // The cursor stays where the selection was
++        val args = Bundle().apply {
++            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, start)
++            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, start)
++        }
++        field.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, args)
++        markVerified(next)
++        DictationLog.add(service, "borrada la selección (${end - start} caracteres)")
++        if (next.isEmpty()) {
++            handler.postDelayed({
++                field.refresh()
++                field.text?.toString()?.takeIf { it.isNotEmpty() }?.let { placeholders.add(it) }
++            }, 250)
++        }
++        return true
++    }
++
+     private fun eraseOne(field: AccessibilityNodeInfo, current: String) {
+         val next = if (current.isEmpty()) "" else
+             current.substring(0, current.offsetByCodePoints(current.length, -1))
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index d219c47..eee4f65 100755
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -158,14 +158,18 @@
+     <string name="dictation_log_clear">Clear log</string>
+     <string name="dictation_erase">Delete last character</string>
+     <string name="options_dictation_ai">Dictation with AI (Gemini)</string>
+-    <string name="ai_dialog_message">The microphone records your voice and Gemini writes the text with punctuation and without filler words. The key is only stored on this phone. Without a key the normal dictation is used.</string>
++    <string name="ai_dialog_message">The microphone records your voice and Gemini writes the text with punctuation and without filler words. If Gemini fails, ChatGPT (OpenAI) is tried when its key is set. Keys are only stored on this phone. Without any key the normal dictation is used.</string>
+     <string name="ai_key_hint">Gemini API key</string>
+     <string name="ai_model_hint">Model (default: %1$s)</string>
+-    <string name="ai_key_error">The Gemini key is not valid or has no permission. Check it in the settings.</string>
+-    <string name="ai_quota_error">The Gemini usage limit was reached. Try again later.</string>
+-    <string name="ai_network_error">Could not reach Gemini.</string>
+-    <string name="ai_failed">Gemini could not transcribe the audio.</string>
+-    <string name="ai_busy">Gemini is saturated right now. Try again in a few seconds.</string>
++    <string name="ai_key_error">The AI key is not valid or has no permission. Check it in the settings.</string>
++    <string name="ai_quota_error">The AI usage limit was reached. Try again later.</string>
++    <string name="ai_network_error">Could not reach the AI service.</string>
++    <string name="ai_failed">The AI could not transcribe the audio.</string>
++    <string name="ai_busy">The AI is saturated right now. Try again in a few seconds.</string>
++    <string name="ai_openai_key_hint">OpenAI (ChatGPT) API key, as backup</string>
++    <string name="ai_openai_model_hint">OpenAI model (default: %1$s)</string>
++    <string name="ai_status_openai_fallback">Gemini is not answering, trying ChatGPT…</string>
++    <string name="ai_status_openai">ChatGPT: transcribing and cleaning the text…</string>
+     <string name="ai_status_sending">Sending audio…</string>
+     <string name="ai_status_working">Transcribing and cleaning the text…</string>
+     <string name="ai_status_retry">Gemini is busy, attempt %1$d of %2$d…</string>
+diff --git a/app/src/main/res/values-es/strings.xml b/app/src/main/res/values-es/strings.xml
+index cf9596d..0110a8f 100644
+--- a/app/src/main/res/values-es/strings.xml
++++ b/app/src/main/res/values-es/strings.xml
+@@ -158,14 +158,18 @@
+     <string name="dictation_log_clear">Borrar registro</string>
+     <string name="dictation_erase">Borrar último carácter</string>
+     <string name="options_dictation_ai">Dictado con IA (Gemini)</string>
+-    <string name="ai_dialog_message">El micrófono graba tu voz y Gemini escribe el texto con puntuación y sin muletillas. La clave solo se guarda en este móvil. Sin clave se usa el dictado normal.</string>
++    <string name="ai_dialog_message">El micrófono graba tu voz y Gemini escribe el texto con puntuación y sin muletillas. Si Gemini falla, se prueba con ChatGPT (OpenAI) cuando hay clave. Las claves solo se guardan en este móvil. Sin ninguna clave se usa el dictado normal.</string>
+     <string name="ai_key_hint">Clave de API de Gemini</string>
+     <string name="ai_model_hint">Modelo (por defecto: %1$s)</string>
+-    <string name="ai_key_error">La clave de Gemini no es válida o no tiene permiso. Revísala en los ajustes.</string>
+-    <string name="ai_quota_error">Se superó el límite de uso de Gemini. Inténtalo más tarde.</string>
+-    <string name="ai_network_error">No hay conexión con Gemini.</string>
+-    <string name="ai_failed">Gemini no pudo transcribir el audio.</string>
+-    <string name="ai_busy">Gemini está saturado en este momento. Inténtalo de nuevo en unos segundos.</string>
++    <string name="ai_key_error">La clave de la IA no es válida o no tiene permiso. Revísala en los ajustes.</string>
++    <string name="ai_quota_error">Se superó el límite de uso de la IA. Inténtalo más tarde.</string>
++    <string name="ai_network_error">No hay conexión con el servicio de IA.</string>
++    <string name="ai_failed">La IA no pudo transcribir el audio.</string>
++    <string name="ai_busy">La IA está saturada en este momento. Inténtalo de nuevo en unos segundos.</string>
++    <string name="ai_openai_key_hint">Clave de API de OpenAI (ChatGPT), de respaldo</string>
++    <string name="ai_openai_model_hint">Modelo de OpenAI (por defecto: %1$s)</string>
++    <string name="ai_status_openai_fallback">Gemini no responde, probando con ChatGPT…</string>
++    <string name="ai_status_openai">ChatGPT: transcribiendo y limpiando el texto…</string>
+     <string name="ai_status_sending">Enviando audio…</string>
+     <string name="ai_status_working">Transcribiendo y limpiando el texto…</string>
+     <string name="ai_status_retry">Gemini ocupado, intento %1$d de %2$d…</string>

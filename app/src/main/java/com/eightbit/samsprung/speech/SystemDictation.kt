@@ -366,6 +366,8 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
         val field = target ?: return false
         // Waiting for the check of a previous press: keep going, but do nothing yet
         if (probing) return true
+        // A selected text goes away at once (and holding the button does not go on deleting)
+        if (deleteSelection(field)) return false
 
         val recent = verifiedText != null && SystemClock.uptimeMillis() - verifiedAt < 1500
         val current: String
@@ -396,6 +398,34 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
                 eraseOne(field, current)
             }
         }, 250)
+        return true
+    }
+
+    /** Deletes the selected text in one go. Returns false when nothing is selected. */
+    private fun deleteSelection(field: AccessibilityNodeInfo): Boolean {
+        field.refresh()
+        val text = field.text?.toString() ?: return false
+        val start = minOf(field.textSelectionStart, field.textSelectionEnd)
+        val end = maxOf(field.textSelectionStart, field.textSelectionEnd)
+        if (start < 0 || end <= start || end > text.length) return false
+        if (field.isShowingHintText || text in placeholders) return false
+        if (dictation.isListening || dictation.isProcessing) dictation.destroy()
+        val next = text.removeRange(start, end)
+        setFieldText(field, next)
+        // The cursor stays where the selection was
+        val args = Bundle().apply {
+            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, start)
+            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, start)
+        }
+        field.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, args)
+        markVerified(next)
+        DictationLog.add(service, "borrada la selección (${end - start} caracteres)")
+        if (next.isEmpty()) {
+            handler.postDelayed({
+                field.refresh()
+                field.text?.toString()?.takeIf { it.isNotEmpty() }?.let { placeholders.add(it) }
+            }, 250)
+        }
         return true
     }
 
