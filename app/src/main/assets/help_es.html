@@ -4,13 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  html, body { margin: 0; background: transparent; }
+  html { background: #000 radial-gradient(ellipse at 50% 40%, #12303a 0%, #050b0e 60%, #000 100%) fixed; min-height: 100%; }
+  body { margin: 0; background: transparent; }
   body { font-family: sans-serif; color: #fff; padding: 12px 12px 40px; line-height: 1.4; }
-  .logo { position: fixed; top: 50%; left: 50%; width: 70vw; max-width: 320px;
-          transform: translate(-50%, -50%); opacity: .10; border-radius: 22%; z-index: -1; }
+  .logo { position: fixed; top: 44%; left: 50%; width: 100vw; max-width: 460px;
+          transform: translate(-50%, -50%); opacity: .6; z-index: -1;
+          -webkit-mask-image: radial-gradient(circle at center, #000 28%, rgba(0, 0, 0, 0) 70%);
+          mask-image: radial-gradient(circle at center, #000 28%, rgba(0, 0, 0, 0) 70%); }
   h1 { font-size: 20px; text-align: center; margin: 4px 0 2px; }
   .sub { text-align: center; opacity: .85; font-size: 14px; margin-bottom: 8px; }
-  section { background: rgba(16, 24, 28, .84); border: 1px solid rgba(77, 208, 200, .45);
+  section { background: rgba(0, 0, 0, .50); border: 1px solid rgba(77, 208, 200, .45);
             border-radius: 12px; padding: 4px 14px 10px; margin: 10px 0; }
   h2 { font-size: 16px; color: #4DD0C8; margin: 10px 0 4px; }
   ul, ol { margin: 4px 0; padding-left: 20px; font-size: 14px; }

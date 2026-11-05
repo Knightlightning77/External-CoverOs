@@ -1008,6 +1008,7 @@ class CoverPreferences : AppCompatActivity() {
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
             Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
         } catch (_: Exception) { "" }
+        webView.setBackgroundColor(Color.BLACK)
         webView.loadDataWithBaseURL(
             null, html.replace("{{LOGO}}", "data:image/png;base64,$logo"),
             "text/html", "utf-8", null
