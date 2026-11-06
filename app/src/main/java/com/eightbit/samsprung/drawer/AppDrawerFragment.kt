@@ -36,7 +36,6 @@ import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.GridLayoutManager
-import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.eightbit.content.ScaledContext
@@ -46,7 +45,6 @@ import com.eightbit.samsprung.R
 import com.eightbit.samsprung.SamSprungOverlay
 import com.eightbit.samsprung.settings.Preferences
 import com.eightbit.view.OnSwipeTouchListener
-import com.eightbit.widget.RecyclerViewTouch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -122,15 +120,6 @@ class AppDrawerFragment : Fragment(), DrawerAppAdapter.OnAppClickListener {
             launcherView.updatePadding(bottom = 30)
             it.isGone = true
         }
-
-        RecyclerViewTouch(launcherView).setSwipeCallback(ItemTouchHelper.DOWN,
-            object: RecyclerViewTouch.SwipeCallback {
-            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
-                if (direction == ItemTouchHelper.DOWN) {
-                    onSwipeClosed(launcherView)
-                }
-            }
-        })
 
         launcherView.setOnTouchListener(object : OnSwipeTouchListener(requireActivity()) {
             override fun onSwipeBottom() : Boolean {

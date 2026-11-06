@@ -116,8 +116,6 @@ class CoverPreferences : AppCompatActivity() {
 
     private lateinit var hiddenList: RecyclerView
 
-    private val donationManager = DonationManager(this)
-
     @SuppressLint("ClickableViewAccessibility", "InflateParams")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -140,8 +138,6 @@ class CoverPreferences : AppCompatActivity() {
             PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP
         )
 
-        donationManager.retrieveDonationMenu()
-
         coordinator = findViewById(R.id.coordinator)
         findViewById<BlurView>(R.id.blurContainer).setupWith(coordinator)
             .setFrameClearDrawable(coordinator.background)
@@ -153,9 +149,6 @@ class CoverPreferences : AppCompatActivity() {
         findViewById<LinearLayout>(R.id.build_layout).setOnClickListener {
             wikiDrawer.openDrawer(GravityCompat.START)
         }
-
-        val googlePlay = findViewById<LinearLayout>(R.id.button_donate)
-        googlePlay.setOnClickListener { donationManager.onSendDonationClicked() }
 
         findViewById<LinearLayout>(R.id.logcat).setOnClickListener {
             if (updateManager?.hasPendingUpdate() == true) {
