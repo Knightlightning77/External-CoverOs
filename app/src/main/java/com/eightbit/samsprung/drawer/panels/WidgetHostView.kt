@@ -22,6 +22,7 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import com.eightbit.samsprung.R
+import com.eightbit.samsprung.speech.DictationLog
 
 /**
  * {@inheritDoc}
@@ -33,9 +34,8 @@ class WidgetHostView(context: Context) : AppWidgetHostView(context) {
         }
     }
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
-        when (ev.action) {
-            MotionEvent.ACTION_DOWN -> { }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { }
+        if (ev.action == MotionEvent.ACTION_DOWN) {
+            DictationLog.add(context, "Widget: toque recibido (${ev.x.toInt()},${ev.y.toInt()})")
         }
         return false
     }

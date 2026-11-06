@@ -1,0 +1,95 @@
+diff --git a/app/src/main/java/com/eightbit/samsprung/drawer/PanelWidgetManager.kt b/app/src/main/java/com/eightbit/samsprung/drawer/PanelWidgetManager.kt
+index 084d54a..e51074e 100755
+--- a/app/src/main/java/com/eightbit/samsprung/drawer/PanelWidgetManager.kt
++++ b/app/src/main/java/com/eightbit/samsprung/drawer/PanelWidgetManager.kt
+@@ -53,7 +53,10 @@ class PanelWidgetManager(
+         appWidgetId: Int, appWidgetInfo: AppWidgetProviderInfo, launcherInfo: PanelWidgetInfo
+     ): AppWidgetHostView {
+         return appWidgetHost.createView(
+-            WidgetSizing.widgetContext(overlay.applicationContext, widgetDensity, true),
++            WidgetActionContext(
++                WidgetSizing.widgetContext(overlay.applicationContext, widgetDensity, true),
++                overlay
++            ),
+             appWidgetId, appWidgetInfo
+         ).apply { tag = launcherInfo }
+     }
+diff --git a/app/src/main/java/com/eightbit/samsprung/drawer/panels/WidgetActionContext.kt b/app/src/main/java/com/eightbit/samsprung/drawer/panels/WidgetActionContext.kt
+new file mode 100644
+index 0000000..e35e95a
+--- /dev/null
++++ b/app/src/main/java/com/eightbit/samsprung/drawer/panels/WidgetActionContext.kt
+@@ -0,0 +1,49 @@
++package com.eightbit.samsprung.drawer.panels
++
++import android.app.Activity
++import android.app.ActivityOptions
++import android.content.Context
++import android.content.ContextWrapper
++import android.content.Intent
++import android.content.IntentSender
++import android.os.Bundle
++import com.eightbit.samsprung.speech.DictationLog
++
++/**
++ * Context given to the widget host views. The cover display context is not an Activity, and
++ * widgets send the action of their buttons with [Context.startIntentSender], which only
++ * an Activity implements: on a plain context it fails silently and the widget seems dead.
++ * Here those calls are handed to the [activity] that owns the window.
++ */
++class WidgetActionContext(base: Context, private val activity: Activity) : ContextWrapper(base) {
++
++    override fun startIntentSender(
++        intent: IntentSender?, fillInIntent: Intent?, flagsMask: Int, flagsValues: Int,
++        extraFlags: Int
++    ) {
++        startIntentSender(intent, fillInIntent, flagsMask, flagsValues, extraFlags, null)
++    }
++
++    override fun startIntentSender(
++        intent: IntentSender?, fillInIntent: Intent?, flagsMask: Int, flagsValues: Int,
++        extraFlags: Int, options: Bundle?
++    ) {
++        try {
++            val launch = try {
++                val displayId = activity.display?.displayId ?: 0
++                (if (options != null) ActivityOptions.fromBundle(options)
++                else ActivityOptions.makeBasic()).also {
++                    if (displayId > 0) it.launchDisplayId = displayId
++                }.toBundle()
++            } catch (_: Exception) {
++                options
++            }
++            activity.startIntentSender(
++                intent, fillInIntent, flagsMask, flagsValues, extraFlags, launch
++            )
++        } catch (ex: Exception) {
++            DictationLog.add(activity, "Widget: acción fallida (${ex.javaClass.simpleName})")
++            throw ex
++        }
++    }
++}
+diff --git a/app/src/main/java/com/eightbit/samsprung/drawer/panels/WidgetHostView.kt b/app/src/main/java/com/eightbit/samsprung/drawer/panels/WidgetHostView.kt
+index 3ddd41f..2972fab 100755
+--- a/app/src/main/java/com/eightbit/samsprung/drawer/panels/WidgetHostView.kt
++++ b/app/src/main/java/com/eightbit/samsprung/drawer/panels/WidgetHostView.kt
+@@ -22,6 +22,7 @@ import android.view.LayoutInflater
+ import android.view.MotionEvent
+ import android.view.View
+ import com.eightbit.samsprung.R
++import com.eightbit.samsprung.speech.DictationLog
+ 
+ /**
+  * {@inheritDoc}
+@@ -33,9 +34,8 @@ class WidgetHostView(context: Context) : AppWidgetHostView(context) {
+         }
+     }
+     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
+-        when (ev.action) {
+-            MotionEvent.ACTION_DOWN -> { }
+-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { }
++        if (ev.action == MotionEvent.ACTION_DOWN) {
++            DictationLog.add(context, "Widget: toque recibido (${ev.x.toInt()},${ev.y.toInt()})")
+         }
+         return false
+     }

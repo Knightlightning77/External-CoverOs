@@ -53,7 +53,10 @@ class PanelWidgetManager(
         appWidgetId: Int, appWidgetInfo: AppWidgetProviderInfo, launcherInfo: PanelWidgetInfo
     ): AppWidgetHostView {
         return appWidgetHost.createView(
-            WidgetSizing.widgetContext(overlay.applicationContext, widgetDensity, true),
+            WidgetActionContext(
+                WidgetSizing.widgetContext(overlay.applicationContext, widgetDensity, true),
+                overlay
+            ),
             appWidgetId, appWidgetInfo
         ).apply { tag = launcherInfo }
     }
