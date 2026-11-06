@@ -1,0 +1,75 @@
+diff --git a/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt b/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt
+index 84d0be7..e2ddd70 100755
+--- a/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt
++++ b/app/src/main/java/com/eightbit/samsprung/settings/CoverPreferences.kt
+@@ -148,9 +148,6 @@ class CoverPreferences : AppCompatActivity() {
+             wikiDrawer.openDrawer(GravityCompat.START)
+         }
+ 
+-        val googlePlay = findViewById<LinearLayout>(R.id.button_donate)
+-        googlePlay.setOnClickListener { donationManager.onSendDonationClicked() }
+-
+         findViewById<LinearLayout>(R.id.logcat).setOnClickListener {
+             if (updateManager?.hasPendingUpdate() == true) {
+                 IconifiedSnackbar(this).buildTickerBar(
+diff --git a/app/src/main/java/com/eightbit/widget/RecyclerViewTouch.kt b/app/src/main/java/com/eightbit/widget/RecyclerViewTouch.kt
+index 02dce4c..e3e55b5 100755
+--- a/app/src/main/java/com/eightbit/widget/RecyclerViewTouch.kt
++++ b/app/src/main/java/com/eightbit/widget/RecyclerViewTouch.kt
+@@ -27,6 +27,16 @@ class RecyclerViewTouch(var recyclerView: RecyclerView) {
+         object : ItemTouchHelper.SimpleCallback(
+             0, swipeDirections ?: (ItemTouchHelper.START or ItemTouchHelper.END)
+         ) {
++        override fun getSwipeDirs(
++            recyclerView: RecyclerView,
++            viewHolder: RecyclerView.ViewHolder
++        ): Int {
++            // Si solo se pide DOWN (cajon de apps) no capturar gestos horizontales:
++            // se los dejamos al ViewPager de widgets.
++            return if (swipeDirections == ItemTouchHelper.DOWN) 0
++            else super.getSwipeDirs(recyclerView, viewHolder)
++        }
++
+         override fun onMove(
+             recyclerView: RecyclerView,
+             viewHolder: RecyclerView.ViewHolder,
+diff --git a/app/src/main/res/layout/social_menu_bar.xml b/app/src/main/res/layout/social_menu_bar.xml
+index 2222b87..6508f04 100755
+--- a/app/src/main/res/layout/social_menu_bar.xml
++++ b/app/src/main/res/layout/social_menu_bar.xml
+@@ -39,35 +39,6 @@
+                 android:gravity="center_vertical" />
+         </LinearLayout>
+ 
+-        <View
+-            android:layout_width="1dp"
+-            android:layout_height="match_parent"
+-            android:background="@color/primary_dark" />
+-
+-        <LinearLayout
+-            android:id="@+id/button_donate"
+-            android:layout_width="0dp"
+-            android:layout_height="wrap_content"
+-            android:layout_weight="2"
+-            android:gravity="center"
+-            android:orientation="horizontal">
+-            <androidx.appcompat.widget.AppCompatImageView
+-                android:layout_width="wrap_content"
+-                android:layout_height="wrap_content"
+-                android:gravity="center_vertical"
+-                app:srcCompat="@drawable/ic_github_sponsor_24dp"
+-                android:contentDescription="@string/description_icon"/>
+-            <TextView
+-                android:layout_width="wrap_content"
+-                android:layout_height="wrap_content"
+-                android:textSize="14sp"
+-                android:maxLines="1"
+-                android:layout_marginStart="8dp"
+-                android:textColor="?android:textColorPrimary"
+-                android:gravity="center_vertical"
+-                android:text="@string/donate_link" />
+-        </LinearLayout>
+-
+         <View
+             android:layout_width="1dp"
+             android:layout_height="match_parent"
