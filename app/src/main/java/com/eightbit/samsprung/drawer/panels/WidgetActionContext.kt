@@ -31,10 +31,10 @@ class WidgetActionContext(base: Context, private val activity: Activity) : Conte
         try {
             val launch = try {
                 val displayId = activity.display?.displayId ?: 0
-                (if (options != null) ActivityOptions.fromBundle(options)
-                else ActivityOptions.makeBasic()).also {
+                val basic = ActivityOptions.makeBasic().also {
                     if (displayId > 0) it.launchDisplayId = displayId
                 }.toBundle()
+                if (options != null) Bundle(options).also { it.putAll(basic) } else basic
             } catch (_: Exception) {
                 options
             }
