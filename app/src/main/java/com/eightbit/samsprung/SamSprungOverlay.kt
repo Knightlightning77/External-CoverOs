@@ -137,6 +137,9 @@ class SamSprungOverlay : AppCompatActivity() {
     }
     private lateinit var battReceiver: BroadcastReceiver
 
+    // Button in the top right corner to turn the cover display off
+    private var powerButton: AppCompatImageView? = null
+
     private lateinit var bottomSheetBehaviorMain: BottomSheetBehavior<View>
     private lateinit var viewPager: ViewPager2
     private var pagerAdapter: FragmentStateAdapter = CoverStateAdapter(this)
@@ -678,6 +681,7 @@ class SamSprungOverlay : AppCompatActivity() {
                             fakeOverlay.visibility = View.GONE
                             menuButton.hide()
                             hideResumeButton()
+                            hidePowerButton()
                             coordinator.visibility = View.VISIBLE
                             val index = prefs.getInt(Preferences.prefViewer, viewPager.currentItem)
                             viewPager.setCurrentItem(if (index < 2) 1 else index, false)
@@ -687,6 +691,7 @@ class SamSprungOverlay : AppCompatActivity() {
             })
         }
         setScreenTimeout(findViewById(R.id.bottom_sheet_main))
+        setupPowerButton()
         showBottomHandle(bottomHandle, menuButton)
         findViewById<FloatingActionButton>(R.id.resume_fab).setOnClickListener { resumeLastApp() }
 
@@ -792,11 +797,14 @@ class SamSprungOverlay : AppCompatActivity() {
         val color = prefs.getInt(Preferences.prefColors,
             Color.rgb(255, 255, 255))
         bottomHandle.setBackgroundColor(color)
+        // No visible line under the buttons (the view stays, the buttons hang from it)
+        bottomHandle.setBackgroundColor(Color.TRANSPARENT)
         bottomHandle.alpha = prefs.getFloat(Preferences.prefAlphas, 1f)
         setMenuButtonGravity(menuButton)
         menuButton.drawable.mutate().setTint(color)
         menuButton.alpha = prefs.getFloat(Preferences.prefAlphas, 1f)
         updateResumeButton(menuButton, color)
+        applyPowerStyle(color)
     }
 
     /** Apps that were open on the cover display when the screen went off, most recent first. */
@@ -830,6 +838,62 @@ class SamSprungOverlay : AppCompatActivity() {
             params.marginEnd = menuParams.marginEnd + offset
         }
         resume.layoutParams = params
+    }
+
+    /**
+     * Button in the top right corner that turns the cover display off. It has the same size as
+     * the buttons of the lower corner and is shown and hidden together with them.
+     */
+    private fun setupPowerButton() {
+        val main = findViewById<CoordinatorLayout>(R.id.coordinator_main) ?: return
+        val large = prefs.getBoolean(Preferences.prefTapper, false)
+        val size = (if (large) 56 else 40).toPx
+        val pad = (if (large) 4 else 10).toPx
+        val power = AppCompatImageView(this).apply {
+            setImageResource(R.drawable.ic_power_24dp)
+            setPadding(pad, pad, pad, pad)
+            contentDescription = "Apagar pantalla"
+            visibility = View.INVISIBLE
+            setOnClickListener {
+                if (prefs.getBoolean(Preferences.prefReacts, true))
+                    vibrator.vibrate(effectClick)
+                val locked = AccessibilityObserver.getInstance()?.performGlobalAction(
+                    android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN
+                ) ?: false
+                if (!locked) {
+                    Toast.makeText(
+                        this@SamSprungOverlay,
+                        "Activa el servicio de accesibilidad de External CoverOs para apagar la pantalla",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+        main.addView(power, CoordinatorLayout.LayoutParams(size, size).apply {
+            gravity = Gravity.TOP or Gravity.END
+            val margin = 5.toPx
+            setMargins(margin, margin, margin, margin)
+        })
+        powerButton = power
+        applyPowerStyle(prefs.getInt(Preferences.prefColors, Color.rgb(255, 255, 255)))
+    }
+
+    private fun applyPowerStyle(color: Int) {
+        powerButton?.drawable?.mutate()?.setTint(color)
+    }
+
+    private fun showPowerButton() {
+        val power = powerButton ?: return
+        power.animate().cancel()
+        power.visibility = View.VISIBLE
+        power.animate().alpha(prefs.getFloat(Preferences.prefAlphas, 1f)).setDuration(150).start()
+    }
+
+    private fun hidePowerButton() {
+        val power = powerButton ?: return
+        power.animate().cancel()
+        power.animate().alpha(0f).setDuration(150)
+            .withEndAction { power.visibility = View.INVISIBLE }.start()
     }
 
     private fun showResumeButton() {
@@ -1344,11 +1408,13 @@ class SamSprungOverlay : AppCompatActivity() {
         val menuButton = findViewById<FloatingActionButton>(R.id.menu_fab)
         menuButton.show()
         showResumeButton()
+        showPowerButton()
         fakeOverlay.visibility = View.VISIBLE
         fabShowHandler.postDelayed({
             fakeOverlay.visibility = View.INVISIBLE
             menuButton.hide()
             hideResumeButton()
+            hidePowerButton()
         }, 3300)
     }
 

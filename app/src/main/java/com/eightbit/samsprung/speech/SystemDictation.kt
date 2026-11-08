@@ -466,11 +466,14 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
             val gap = margin()
             val label = statusView ?: TextView(context).apply {
                 setTextColor(Color.WHITE)
-                setTextSize(TypedValue.COMPLEX_UNIT_PX, buttonSize * 0.2f)
-                setPadding(buttonSize / 5, buttonSize / 10, buttonSize / 5, buttonSize / 10)
+                setTextSize(TypedValue.COMPLEX_UNIT_PX, buttonSize * 0.26f)
+                setPadding(
+                    (buttonSize * 0.26f).toInt(), (buttonSize * 0.13f).toInt(),
+                    (buttonSize * 0.26f).toInt(), (buttonSize * 0.13f).toInt()
+                )
                 background = GradientDrawable().apply {
                     setColor(Color.parseColor("#E6263238"))
-                    cornerRadius = buttonSize * 0.25f
+                    cornerRadius = buttonSize * 0.325f
                 }
             }.also { statusView = it }
             label.maxWidth = screen.width() - 2 * gap

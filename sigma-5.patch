@@ -1,0 +1,159 @@
+diff --git a/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt b/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt
+index e91640b..b1122fa 100644
+--- a/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt
++++ b/app/src/main/java/com/eightbit/samsprung/SamSprungOverlay.kt
+@@ -137,6 +137,9 @@ class SamSprungOverlay : AppCompatActivity() {
+     }
+     private lateinit var battReceiver: BroadcastReceiver
+ 
++    // Button in the top right corner to turn the cover display off
++    private var powerButton: AppCompatImageView? = null
++
+     private lateinit var bottomSheetBehaviorMain: BottomSheetBehavior<View>
+     private lateinit var viewPager: ViewPager2
+     private var pagerAdapter: FragmentStateAdapter = CoverStateAdapter(this)
+@@ -678,6 +681,7 @@ class SamSprungOverlay : AppCompatActivity() {
+                             fakeOverlay.visibility = View.GONE
+                             menuButton.hide()
+                             hideResumeButton()
++                            hidePowerButton()
+                             coordinator.visibility = View.VISIBLE
+                             val index = prefs.getInt(Preferences.prefViewer, viewPager.currentItem)
+                             viewPager.setCurrentItem(if (index < 2) 1 else index, false)
+@@ -687,6 +691,7 @@ class SamSprungOverlay : AppCompatActivity() {
+             })
+         }
+         setScreenTimeout(findViewById(R.id.bottom_sheet_main))
++        setupPowerButton()
+         showBottomHandle(bottomHandle, menuButton)
+         findViewById<FloatingActionButton>(R.id.resume_fab).setOnClickListener { resumeLastApp() }
+ 
+@@ -792,11 +797,14 @@ class SamSprungOverlay : AppCompatActivity() {
+         val color = prefs.getInt(Preferences.prefColors,
+             Color.rgb(255, 255, 255))
+         bottomHandle.setBackgroundColor(color)
++        // No visible line under the buttons (the view stays, the buttons hang from it)
++        bottomHandle.setBackgroundColor(Color.TRANSPARENT)
+         bottomHandle.alpha = prefs.getFloat(Preferences.prefAlphas, 1f)
+         setMenuButtonGravity(menuButton)
+         menuButton.drawable.mutate().setTint(color)
+         menuButton.alpha = prefs.getFloat(Preferences.prefAlphas, 1f)
+         updateResumeButton(menuButton, color)
++        applyPowerStyle(color)
+     }
+ 
+     /** Apps that were open on the cover display when the screen went off, most recent first. */
+@@ -832,6 +840,62 @@ class SamSprungOverlay : AppCompatActivity() {
+         resume.layoutParams = params
+     }
+ 
++    /**
++     * Button in the top right corner that turns the cover display off. It has the same size as
++     * the buttons of the lower corner and is shown and hidden together with them.
++     */
++    private fun setupPowerButton() {
++        val main = findViewById<CoordinatorLayout>(R.id.coordinator_main) ?: return
++        val large = prefs.getBoolean(Preferences.prefTapper, false)
++        val size = (if (large) 56 else 40).toPx
++        val pad = (if (large) 4 else 10).toPx
++        val power = AppCompatImageView(this).apply {
++            setImageResource(R.drawable.ic_power_24dp)
++            setPadding(pad, pad, pad, pad)
++            contentDescription = "Apagar pantalla"
++            visibility = View.INVISIBLE
++            setOnClickListener {
++                if (prefs.getBoolean(Preferences.prefReacts, true))
++                    vibrator.vibrate(effectClick)
++                val locked = AccessibilityObserver.getInstance()?.performGlobalAction(
++                    android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN
++                ) ?: false
++                if (!locked) {
++                    Toast.makeText(
++                        this@SamSprungOverlay,
++                        "Activa el servicio de accesibilidad de External CoverOs para apagar la pantalla",
++                        Toast.LENGTH_LONG
++                    ).show()
++                }
++            }
++        }
++        main.addView(power, CoordinatorLayout.LayoutParams(size, size).apply {
++            gravity = Gravity.TOP or Gravity.END
++            val margin = 5.toPx
++            setMargins(margin, margin, margin, margin)
++        })
++        powerButton = power
++        applyPowerStyle(prefs.getInt(Preferences.prefColors, Color.rgb(255, 255, 255)))
++    }
++
++    private fun applyPowerStyle(color: Int) {
++        powerButton?.drawable?.mutate()?.setTint(color)
++    }
++
++    private fun showPowerButton() {
++        val power = powerButton ?: return
++        power.animate().cancel()
++        power.visibility = View.VISIBLE
++        power.animate().alpha(prefs.getFloat(Preferences.prefAlphas, 1f)).setDuration(150).start()
++    }
++
++    private fun hidePowerButton() {
++        val power = powerButton ?: return
++        power.animate().cancel()
++        power.animate().alpha(0f).setDuration(150)
++            .withEndAction { power.visibility = View.INVISIBLE }.start()
++    }
++
+     private fun showResumeButton() {
+         if (lastApps().isNotEmpty()) findViewById<FloatingActionButton>(R.id.resume_fab).show()
+     }
+@@ -1344,11 +1408,13 @@ class SamSprungOverlay : AppCompatActivity() {
+         val menuButton = findViewById<FloatingActionButton>(R.id.menu_fab)
+         menuButton.show()
+         showResumeButton()
++        showPowerButton()
+         fakeOverlay.visibility = View.VISIBLE
+         fabShowHandler.postDelayed({
+             fakeOverlay.visibility = View.INVISIBLE
+             menuButton.hide()
+             hideResumeButton()
++            hidePowerButton()
+         }, 3300)
+     }
+ 
+diff --git a/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt b/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
+index e16abf2..20dcec0 100644
+--- a/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
++++ b/app/src/main/java/com/eightbit/samsprung/speech/SystemDictation.kt
+@@ -466,11 +466,14 @@ class SystemDictation(private val service: AccessibilityService) : DictationHelp
+             val gap = margin()
+             val label = statusView ?: TextView(context).apply {
+                 setTextColor(Color.WHITE)
+-                setTextSize(TypedValue.COMPLEX_UNIT_PX, buttonSize * 0.2f)
+-                setPadding(buttonSize / 5, buttonSize / 10, buttonSize / 5, buttonSize / 10)
++                setTextSize(TypedValue.COMPLEX_UNIT_PX, buttonSize * 0.26f)
++                setPadding(
++                    (buttonSize * 0.26f).toInt(), (buttonSize * 0.13f).toInt(),
++                    (buttonSize * 0.26f).toInt(), (buttonSize * 0.13f).toInt()
++                )
+                 background = GradientDrawable().apply {
+                     setColor(Color.parseColor("#E6263238"))
+-                    cornerRadius = buttonSize * 0.25f
++                    cornerRadius = buttonSize * 0.325f
+                 }
+             }.also { statusView = it }
+             label.maxWidth = screen.width() - 2 * gap
+diff --git b/app/src/main/res/drawable/ic_power_24dp.xml b/app/src/main/res/drawable/ic_power_24dp.xml
+new file mode 100644
+index 0000000..bd4a97d
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_power_24dp.xml
+@@ -0,0 +1,9 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp"
++    android:height="24dp"
++    android:viewportWidth="24"
++    android:viewportHeight="24">
++    <path
++        android:fillColor="@android:color/white"
++        android:pathData="M13,3h-2v10h2V3zM17.83,5.17l-1.42,1.42C17.99,7.86 19,9.81 19,12c0,3.87 -3.13,7 -7,7s-7,-3.13 -7,-7c0,-2.19 1.01,-4.14 2.58,-5.42L6.17,5.17C4.23,6.82 3,9.26 3,12c0,4.97 4.03,9 9,9s9,-4.03 9,-9c0,-2.74 -1.23,-5.18 -3.17,-6.83z" />
++</vector>
