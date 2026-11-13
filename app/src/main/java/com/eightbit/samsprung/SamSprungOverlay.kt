@@ -274,9 +274,9 @@ class SamSprungOverlay : AppCompatActivity() {
 
         val blurView = findViewById<BlurView>(R.id.blurContainer)
         if (prefs.getBoolean(Preferences.prefRadius, true)) {
-            blurView.setupWith(coordinator)
-                .setFrameClearDrawable(coordinator.background)
-                .setBlurRadius(1f).setBlurAutoUpdate(true)
+            // The blur copied and processed the animated wallpaper again and again (and its radius
+            // is almost nothing), which slowed the animation down. Only the tint of the blur stays.
+            blurView.setBackgroundColor(ContextCompat.getColor(this, R.color.bottomSheetTint))
         }
 
         val mAppWidgetManager = AppWidgetManager.getInstance(applicationContext)
